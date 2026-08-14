@@ -1,7 +1,7 @@
 # Plan: Importar StudCards al proyecto vacío
 
 ## Resumen
-Migrar la aplicación completa **StudCards** (proyecto de origen "Studia Smart") al proyecto actual, conservando código, diseño, componentes y lógica. El backend apuntará a tu **Supabase propio** (sin Lovable Cloud) y se configurará la generación de cartas con IA mediante tu API key de OpenAI.
+Migrar la aplicación completa **StudCards** desde el proyecto de origen **"Studia Smart supabase"** al proyecto actual, conservando código, diseño, componentes y lógica. El backend apuntará a tu **Supabase propio** (sin Lovable Cloud) y se configurará la generación de cartas con IA mediante tu API key de OpenAI.
 
 ## Alcance incluido
 - Todo el código frontend: rutas, componentes, hooks, lógica SRS, tema, estilos.
