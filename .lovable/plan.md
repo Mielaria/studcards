@@ -30,39 +30,44 @@ Migrar la aplicación completa **StudCards** desde el proyecto de origen **"Stud
 - Dependencias clave a asegurar: `@supabase/supabase-js`, `jspdf`, `react-image-crop`, `sonner`, `zod`, `date-fns`, `recharts`, todas las librerías Radix usadas por shadcn.
 
 ### 3. Configuración de entorno y secrets
-- No copiar el `.env` del proyecto de origen (contiene credenciales ajenas).
-- Crear `.env` local del nuevo proyecto con placeholders para:
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_PUBLISHABLE_KEY`
-  - `SUPABASE_URL`
-  - `SUPABASE_PUBLISHABLE_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY`
+- No copiar el `.env` ni ninguna credencial del proyecto de origen.
+- Configurar en el nuevo proyecto las variables de tu Supabase propio:
+  - `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
+  - `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`
   - `studcards` (API key de OpenAI para generación de cartas)
-- Guardar los secrets reales mediante el formulario seguro de Lovable (`add_secret`) cuando estés listo para proporcionarlos.
+- Los valores reales los introduces tú en el formulario seguro; no se piden claves de service role ni connection string de Postgres.
 
-### 4. Migraciones en tu Supabase propio
-- Las migraciones SQL se copiarán a `supabase/migrations/` en el proyecto.
-- Tendrás que ejecutarlas en tu Supabase propio (SQL Editor de Supabase o Supabase CLI). Incluyen:
-  - Tablas: `profiles`, `subjects`, `flashcards`, `study_sessions`, `card_review_history`.
-  - RLS estricta por usuario (`auth.uid() = user_id`) y GRANTs.
-  - Trigger `handle_new_user()` que crea perfil y 6 materias por defecto al registrarse.
-  - Columnas `avatar_url` y `explanation`.
-- Si prefieres, puedo intentar aplicarlas directamente si me proporcionas la connection string de Postgres de tu Supabase.
+### 4. Tu Supabase: solo lectura de configuración, sin cambios
+- **No se ejecutará ninguna migración SQL** sobre tu Supabase; tu esquema ya está creado con `0001_studcards_init.sql`.
+- **No se sobrescribirá** ningún objeto existente (tablas, RLS, triggers, buckets).
+- Los archivos `supabase/migrations/*.sql` se copian al repositorio solo como referencia histórica del esquema; no se aplican.
+- Se asume que ya existen los buckets privados `card-images` y `avatars` con sus políticas.
 
-### 5. Ajustes y verificación
-- Actualizar `src/integrations/supabase/types.ts` si tu esquema difiere del de origen.
-- Verificar que no haya referencias a URLs/IDs del proyecto de origen.
-- Ejecutar build de desarrollo (`vite build --mode development`) para detectar errores de tipo o imports.
-- Revisar que el tema, navegación y flujo de auth funcionen en preview.
+### 5. Imágenes en Supabase Storage (confirmado)
+- `flashcards.image_url` almacenará **únicamente la ruta del archivo en Storage** (`<USER_ID>/<UUID>.jpg` dentro del bucket `card-images`). **Nunca Base64/data URL.**
+- Avatares: se suben a `avatars/<USER_ID>/<UUID>.jpg` y `profiles.avatar_url` guarda la ruta.
+- El recorte de imágenes existente (`react-image-crop` + `image-crop.ts`) se conserva; el blob resultante se sube a Storage y solo se persiste la ruta.
+- La visualización usa **URLs firmadas** (`createSignedUrl`, con caché en memoria y expiración), respetando las políticas RLS de Storage.
+- Compatibilidad de lectura: si un registro antiguo contiene un `data:` o una URL `http`, se muestra tal cual sin romper la carta.
+- Al eliminar cartas o reemplazar imágenes, se borran los archivos huérfanos del bucket.
+
+### 6. Backup JSON
+- **Importación**: acepta respaldos antiguos con imágenes en Base64; al importar, cada imagen se sube a `card-images/<USER_ID>/<UUID>.jpg` y en la BD se guarda solo la ruta.
+- **Exportación**: descarga los archivos de Storage y los incrusta como Base64 en el JSON para que el backup sea autocontenido.
+
+### 7. Verificación
+- Confirmar que `src/integrations/supabase/types.ts` coincide con tu esquema actual (ajustar solo el archivo de tipos, nunca la BD).
+- Verificar que no queden referencias a URLs/IDs del proyecto de origen.
+- Ejecutar el build de desarrollo para detectar errores de tipos o imports.
+- Probar en preview: registro/login, creación de carta con imagen, visualización con URL firmada, estudio con SRS y export/import JSON.
 
 ## Entregables
-- Proyecto con toda la funcionalidad de StudCards importada.
-- Variables de entorno configuradas para tu Supabase propio.
-- Migraciones SQL listas para aplicar en tu base de datos.
+- Proyecto con toda la funcionalidad de StudCards importada y apuntando a tu Supabase.
+- Manejo de imágenes 100% vía Storage con URLs firmadas.
 - Build verificado sin errores de compilación.
 
 ## Notas importantes
-- **No se usará Lovable Cloud** para el backend; todo Supabase será tu instancia propia.
-- La generación de cartas con IA requiere que el secret `studcards` esté configurado con una API key válida de OpenAI.
-- Las imágenes de las cartas se almacenan como data URLs en la columna `image_url` de `flashcards`, no en Supabase Storage (el proyecto de origen usa este enfoque).
-- Si tu Supabase propio no tiene habilitado el email/password o necesitas ajustar la plantilla de correos, eso se hará desde el dashboard de Supabase.
+- **No se usará Lovable Cloud**; el backend es tu instancia propia de Supabase.
+- **No se tocará tu base de datos**: sin migraciones, sin SQL, sin acceso directo.
+- La generación de cartas con IA requiere el secret `studcards` con una API key válida de OpenAI.
+- Ajustes de plantillas de correo o proveedores de auth se hacen desde tu dashboard de Supabase.
