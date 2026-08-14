@@ -1,0 +1,485 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { AppShell } from "@/components/AppShell";
+import { ExplanationModal } from "@/components/ExplanationModal";
+import { CardImage } from "@/components/CardImage";
+import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
+import { ArrowLeft, Check, X, Clock, Lightbulb } from "lucide-react";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/_authenticated/subjects/$id/study")({
+  head: () => ({ meta: [{ title: "Estudiar — StudCards" }, { name: "robots", content: "noindex" }] }),
+  component: StudyPage,
+});
+
+type Card = {
+  id: string;
+  question: string;
+  option_1: string;
+  option_2: string;
+  option_3: string;
+  option_4: string;
+  correct_option: number;
+  learning_stage: number;
+  is_learned: boolean;
+  correct_answers_count: number;
+  image_url: string | null;
+  explanation: string | null;
+};
+
+function StudyPage() {
+  const { id: subjectId } = Route.useParams();
+  const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
+  const [requestedCount, setRequestedCount] = useState<number | "all">("all");
+  const [available, setAvailable] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const now = new Date().toISOString();
+      const { count } = await supabase
+        .from("flashcards")
+        .select("id", { count: "exact", head: true })
+        .eq("subject_id", subjectId)
+        .eq("is_learned", false)
+        .lte("next_review_at", now);
+      setAvailable(count ?? 0);
+    })();
+  }, [subjectId]);
+
+  if (phase === "setup") {
+    return (
+      <AppShell>
+        <div className="mb-4">
+          <Link
+            to="/subjects/$id"
+            params={{ id: subjectId }}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Volver
+          </Link>
+        </div>
+        <h1 className="font-display text-2xl font-semibold">Configura tu sesión</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {available === null
+            ? "Calculando cartas disponibles…"
+            : `${available} carta${available === 1 ? "" : "s"} disponible${available === 1 ? "" : "s"} para hoy`}
+        </p>
+
+        <div className="mt-6 grid gap-3">
+          <QuickCount
+            label="Todas"
+            active={requestedCount === "all"}
+            onClick={() => setRequestedCount("all")}
+          />
+          {[10, 20, 50].map((n) => (
+            <QuickCount
+              key={n}
+              label={`${n} cartas`}
+              active={requestedCount === n}
+              disabled={available !== null && available < n}
+              onClick={() => setRequestedCount(n)}
+            />
+          ))}
+          <label className="block text-sm">
+            <span className="mb-1.5 block font-medium">Cantidad personalizada</span>
+            <input
+              type="number"
+              min={1}
+              max={available ?? undefined}
+              placeholder="Ej: 33"
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v > 0) setRequestedCount(v);
+              }}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none ring-primary/40 focus:ring-2"
+            />
+          </label>
+        </div>
+
+        <button
+          disabled={!available}
+          onClick={() => setPhase("session")}
+          className="mt-8 w-full rounded-xl bg-primary py-3.5 font-semibold text-primary-foreground shadow-elevated disabled:opacity-60"
+        >
+          Empezar sesión
+        </button>
+      </AppShell>
+    );
+  }
+
+  if (phase === "session") {
+    return (
+      <StudySession
+        subjectId={subjectId}
+        requested={requestedCount}
+        onFinish={() => setPhase("done")}
+      />
+    );
+  }
+
+  return (
+    <AppShell>
+      <div className="text-center">
+        <h1 className="font-display text-2xl font-semibold">¡Sesión completada!</h1>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link
+            to="/subjects/$id"
+            params={{ id: subjectId }}
+            className="rounded-full border border-border px-5 py-2.5 text-sm font-medium"
+          >
+            Volver a la materia
+          </Link>
+          <button
+            onClick={() => setPhase("setup")}
+            className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
+          >
+            Otra sesión
+          </button>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+
+function QuickCount({
+  label,
+  active,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium transition-colors disabled:opacity-40 ${
+        active ? "border-primary bg-primary-soft text-primary" : "border-border bg-card"
+      }`}
+    >
+      {label}
+      {active && <Check className="h-4 w-4" />}
+    </button>
+  );
+}
+
+function StudySession({
+  subjectId,
+  requested,
+  onFinish,
+}: {
+  subjectId: string;
+  requested: number | "all";
+  onFinish: () => void;
+}) {
+  const navigate = useNavigate();
+  const [queue, setQueue] = useState<Card[] | null>(null);
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [correct, setCorrect] = useState(0);
+  const [incorrect, setIncorrect] = useState(0);
+  const startedAt = useRef(new Date());
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt.current.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("flashcards")
+        .select(
+          "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, explanation",
+        )
+        .eq("subject_id", subjectId)
+        .eq("is_learned", false)
+        .lte("next_review_at", now);
+      if (error) return toast.error(error.message);
+      const shuffled = shuffle(data ?? []);
+      const size = requested === "all" ? shuffled.length : Math.min(requested, shuffled.length);
+      setQueue(shuffled.slice(0, size));
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data: sess } = await supabase
+          .from("study_sessions")
+          .insert({
+            user_id: user.id,
+            session_type: "subject",
+            subject_id: subjectId,
+            cards_requested: size,
+          })
+          .select("id")
+          .single();
+        if (sess) setSessionId(sess.id);
+      }
+    })();
+  }, [subjectId, requested]);
+
+  const current = queue?.[index];
+
+  const shuffledOptions = useMemo(() => {
+    if (!current) return [];
+    const opts = [
+      { n: 1, text: current.option_1 },
+      { n: 2, text: current.option_2 },
+      { n: 3, text: current.option_3 },
+      { n: 4, text: current.option_4 },
+    ];
+    return shuffle(opts);
+  }, [current?.id]);
+
+  async function revealAnswer() {
+    if (!current) return;
+    setShowExplanation(true);
+    if (selected !== null) return;
+    // Ver la respuesta cuenta como fallo: vuelve a Etapa 1 (mañana).
+    await answer(0);
+  }
+
+  async function answer(optionN: number) {
+    if (!current || selected !== null) return;
+    setSelected(optionN);
+    const isCorrect = optionN === current.correct_option;
+    if (isCorrect) setCorrect((c) => c + 1);
+    else setIncorrect((c) => c + 1);
+
+    const update = applyAnswer({
+      current_stage: current.learning_stage as Stage,
+      is_learned: current.is_learned,
+      is_correct: isCorrect,
+    });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from("flashcards")
+        .update({
+          learning_stage: update.new_stage,
+          next_review_at: update.next_review_at,
+          is_learned: update.is_learned,
+          correct_answers_count:
+            current.correct_answers_count + update.correct_answers_count_delta,
+        })
+        .eq("id", current.id);
+      await supabase.from("card_review_history").insert({
+        user_id: user.id,
+        flashcard_id: current.id,
+        study_session_id: sessionId,
+        is_correct: isCorrect,
+        review_type: "scheduled",
+        previous_stage: current.learning_stage,
+        new_stage: update.new_stage,
+      });
+    }
+  }
+
+  async function next() {
+    if (!queue) return;
+    if (index + 1 >= queue.length) {
+      // finish
+      const durationSeconds = Math.floor((Date.now() - startedAt.current.getTime()) / 1000);
+      const studied = correct + incorrect;
+      if (sessionId) {
+        await supabase
+          .from("study_sessions")
+          .update({
+            completed_at: new Date().toISOString(),
+            duration_seconds: durationSeconds,
+            cards_studied: studied,
+            correct_count: correct,
+            incorrect_count: incorrect,
+            accuracy: studied ? Number(((correct / studied) * 100).toFixed(2)) : 0,
+          })
+          .eq("id", sessionId);
+      }
+      onFinish();
+      return;
+    }
+    setSelected(null);
+    setShowExplanation(false);
+    setIndex((i) => i + 1);
+  }
+
+  if (!queue)
+    return (
+      <AppShell>
+        <div className="h-40 animate-pulse rounded-2xl bg-muted" />
+      </AppShell>
+    );
+
+  if (queue.length === 0)
+    return (
+      <AppShell>
+        <div className="rounded-2xl border border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No hay cartas para estudiar ahora en esta materia.
+          </p>
+          <button
+            onClick={() => navigate({ to: "/subjects/$id", params: { id: subjectId } })}
+            className="mt-4 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Volver
+          </button>
+        </div>
+      </AppShell>
+    );
+
+  if (!current) return null;
+
+  const answered = selected !== null;
+  const isCorrect = answered && selected === current.correct_option;
+  const totalStudied = correct + incorrect;
+  const finishing = answered && index + 1 >= queue.length;
+
+  return (
+    <AppShell>
+      <header className="mb-4 flex items-center justify-between text-sm text-muted-foreground">
+        <span className="font-display text-lg font-bold">
+          <span className="text-primary">{index + 1}</span>
+          <span className="text-muted-foreground"> / {queue.length}</span>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Clock className="h-4 w-4" /> {formatTime(elapsed)}
+        </span>
+      </header>
+
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+        aria-hidden
+      >
+        <div
+          className="h-full bg-primary transition-all"
+          style={{ width: `${((index + (answered ? 1 : 0)) / queue.length) * 100}%` }}
+        />
+      </div>
+
+      <article className="relative mt-6 rounded-3xl border border-border bg-card p-5 shadow-card md:p-8">
+        <button
+          type="button"
+          onClick={revealAnswer}
+          aria-label="Ver respuesta y explicación"
+          title="Ver respuesta y explicación (cuenta como fallo)"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-warning/40 bg-warning/15 text-warning shadow-card transition-transform hover:scale-105"
+        >
+          <Lightbulb className="h-4 w-4" />
+        </button>
+        {current.image_url && (
+          <CardImage
+            value={current.image_url}
+            alt=""
+            className="mb-4 max-h-72 w-full rounded-2xl bg-muted object-contain"
+          />
+        )}
+        <h2 className="font-display text-xl font-semibold leading-snug md:text-2xl">
+          {current.question}
+        </h2>
+
+        <ul className="mt-5 grid gap-2">
+          {shuffledOptions.map(({ n, text }) => {
+            const isThis = selected === n;
+            const isRight = n === current.correct_option;
+            let styles = "border-border bg-background";
+            if (answered) {
+              if (isRight) styles = "border-success bg-success/10 text-success-foreground";
+              else if (isThis) styles = "border-destructive bg-destructive/10";
+              else styles = "border-border bg-background opacity-60";
+            }
+            return (
+              <li key={n}>
+                <button
+                  disabled={answered}
+                  onClick={() => answer(n)}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-sm transition-colors ${styles}`}
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs font-semibold">
+                    {String.fromCharCode(64 + shuffledOptions.findIndex((o) => o.n === n) + 1)}
+                  </span>
+                  <span className="flex-1">{text}</span>
+                  {answered && isRight && <Check className="h-4 w-4 text-success" />}
+                  {answered && isThis && !isRight && (
+                    <X className="h-4 w-4 text-destructive" />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+
+        {answered && (
+          <div
+            className={`mt-5 rounded-2xl p-4 text-sm ${
+              isCorrect
+                ? "bg-success/15 text-success-foreground"
+                : "bg-destructive/10 text-destructive-foreground"
+            }`}
+          >
+            <p className="font-semibold">
+              {isCorrect ? "¡Correcto!" : "Respuesta incorrecta"}
+            </p>
+            {!isCorrect && (
+              <p className="mt-1 opacity-90">
+                La respuesta correcta era:{" "}
+                <span className="font-medium">
+                  {[current.option_1, current.option_2, current.option_3, current.option_4][
+                    current.correct_option - 1
+                  ]}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+      </article>
+
+      {answered && (
+        <button
+          onClick={next}
+          className="mt-6 w-full rounded-xl bg-primary py-3.5 font-semibold text-primary-foreground shadow-elevated"
+        >
+          {finishing ? "Terminar" : "Continuar"}
+        </button>
+      )}
+
+      <ExplanationModal
+        open={showExplanation}
+        onClose={() => setShowExplanation(false)}
+        correctAnswer={
+          [current.option_1, current.option_2, current.option_3, current.option_4][
+            current.correct_option - 1
+          ]
+        }
+        explanation={current.explanation}
+        footer="Esta carta se marcó como fallada y se repasará mañana."
+        variant="penalty"
+      />
+
+      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+        <span>✓ {correct}</span>
+        <span>
+          Precisión: {totalStudied ? Math.round((correct / totalStudied) * 100) : 0}%
+        </span>
+        <span>✗ {incorrect}</span>
+      </div>
+    </AppShell>
+  );
+}
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
