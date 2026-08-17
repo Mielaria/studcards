@@ -14,11 +14,15 @@ import {
   Target,
   Layers,
   Download,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportSubjectBackup, downloadJson } from "@/lib/backup";
 import { EditCardModal } from "@/components/EditCardModal";
 import { CARD_BUCKET, removeImages } from "@/lib/card-images";
+import { countByState, fetchLastAnswers } from "@/lib/card-state";
+import { serverNow } from "@/lib/clock";
+import { useOfficialDay } from "@/hooks/useOfficialDay";
 
 
 export const Route = createFileRoute("/_authenticated/subjects/$id/")({
@@ -50,46 +54,19 @@ function SubjectDetail() {
     },
   });
 
+  const dayKeyNow = useOfficialDay();
+
   const { data: counts } = useQuery({
-    queryKey: ["subject-counts", id],
+    queryKey: ["subject-counts", id, dayKeyNow],
     queryFn: async () => {
-      const now = new Date().toISOString();
-      const [total, due, newC, inProgress, learned] = await Promise.all([
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("subject_id", id),
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("subject_id", id)
-          .eq("is_learned", false)
-          .lte("next_review_at", now),
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("subject_id", id)
-          .eq("is_learned", false)
-          .eq("correct_answers_count", 0),
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("subject_id", id)
-          .eq("is_learned", false)
-          .gt("correct_answers_count", 0),
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("subject_id", id)
-          .eq("is_learned", true),
-      ]);
-      return {
-        total: total.count ?? 0,
-        due: due.count ?? 0,
-        newC: newC.count ?? 0,
-        inProgress: inProgress.count ?? 0,
-        learned: learned.count ?? 0,
-      };
+      const { data, error } = await supabase
+        .from("flashcards")
+        .select("id, is_learned, next_review_at")
+        .eq("subject_id", id);
+      if (error) throw error;
+      const cards = data ?? [];
+      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
+      return countByState(cards, lastAnswers, serverNow());
     },
   });
 
@@ -259,17 +236,46 @@ function SubjectDetail() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <MiniStat icon={<Target className="h-4 w-4" />} label="Para hoy" value={counts?.due ?? 0} accent />
-        <MiniStat icon={<BookOpen className="h-4 w-4" />} label="Nuevas" value={counts?.newC ?? 0} />
-        <MiniStat icon={<Layers className="h-4 w-4" />} label="En aprendizaje" value={counts?.inProgress ?? 0} />
+        <MiniStat icon={<BookOpen className="h-4 w-4" />} label="Nuevas" value={counts?.new ?? 0} />
+        <MiniStat
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="Falladas"
+          value={counts?.failed ?? 0}
+          danger
+        />
+        <MiniStat icon={<Layers className="h-4 w-4" />} label="En aprendizaje" value={counts?.learning ?? 0} />
         <MiniStat icon={<Sparkles className="h-4 w-4" />} label="Aprendidas" value={counts?.learned ?? 0} />
       </section>
+
+      {(counts?.failed ?? 0) > 0 && (
+        <Link
+          to="/subjects/$id/study"
+          params={{ id }}
+          search={{ mode: "failed" }}
+          className="mt-4 flex items-center justify-between rounded-2xl border border-destructive/40 bg-destructive/10 p-4"
+        >
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <div>
+              <h3 className="font-display text-base font-semibold text-destructive">
+                Repasar falladas
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {counts?.failed} carta{counts?.failed === 1 ? "" : "s"} que respondiste mal
+              </p>
+            </div>
+          </div>
+          <Play className="h-5 w-5 text-destructive" />
+        </Link>
+      )}
 
       <section className="mt-6 grid gap-3 md:grid-cols-2">
         <Link
           to="/subjects/$id/study"
           params={{ id }}
+          search={{ mode: "all" as const }}
           className="flex items-center justify-between rounded-2xl bg-primary p-5 text-primary-foreground shadow-elevated"
         >
           <div>
@@ -301,17 +307,27 @@ function MiniStat({
   label,
   value,
   accent,
+  danger,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   accent?: boolean;
+  danger?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+    <div
+      className={`rounded-2xl border p-4 shadow-card ${
+        danger ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"
+      }`}
+    >
       <div
         className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-          accent ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          danger
+            ? "bg-destructive text-destructive-foreground"
+            : accent
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground"
         }`}
       >
         {icon}

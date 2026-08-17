@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
+import { serverNow } from "@/lib/clock";
 import { Check, X, Clock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -76,7 +77,7 @@ function LearnedPage() {
     setSelected(null);
     setCorrect(0);
     setIncorrect(0);
-    startedAt.current = new Date();
+    startedAt.current = serverNow();
     setElapsed(0);
   }
 
@@ -116,6 +117,7 @@ function LearnedPage() {
         user_id: user.id,
         flashcard_id: card.id,
         is_correct: isCorrect,
+        answered_at: serverNow().toISOString(),
         review_type: "learned",
         previous_stage: card.learning_stage,
         new_stage: upd.new_stage,

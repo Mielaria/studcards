@@ -5,10 +5,18 @@ import { AppShell } from "@/components/AppShell";
 import { ExplanationModal } from "@/components/ExplanationModal";
 import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
-import { ArrowLeft, Check, X, Clock, Lightbulb } from "lucide-react";
+import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
+import { fetchLastAnswers } from "@/lib/card-state";
+import { serverNow, syncClock } from "@/lib/clock";
+import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
+type StudyMode = "all" | "failed";
+
 export const Route = createFileRoute("/_authenticated/subjects/$id/study")({
+  validateSearch: (search: Record<string, unknown>): { mode: StudyMode } => ({
+    mode: search["mode"] === "failed" ? "failed" : "all",
+  }),
   head: () => ({ meta: [{ title: "Estudiar — StudCards" }, { name: "robots", content: "noindex" }] }),
   component: StudyPage,
 });
@@ -26,26 +34,42 @@ type Card = {
   correct_answers_count: number;
   image_url: string | null;
   explanation: string | null;
+  next_review_at: string;
 };
+
+export const CARD_SELECT =
+  "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, explanation, next_review_at";
 
 function StudyPage() {
   const { id: subjectId } = Route.useParams();
+  const { mode } = Route.useSearch();
   const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
   const [requestedCount, setRequestedCount] = useState<number | "all">("all");
-  const [available, setAvailable] = useState<number | null>(null);
+  const [available, setAvailable] = useState<QueueBreakdown | null>(null);
 
   useEffect(() => {
     (async () => {
-      const now = new Date().toISOString();
-      const { count } = await supabase
+      await syncClock();
+      const { data } = await supabase
         .from("flashcards")
-        .select("id", { count: "exact", head: true })
-        .eq("subject_id", subjectId)
-        .eq("is_learned", false)
-        .lte("next_review_at", now);
-      setAvailable(count ?? 0);
+        .select("id, is_learned, next_review_at")
+        .eq("subject_id", subjectId);
+      const cards = data ?? [];
+      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
+      const res = buildDailyQueue({
+        cards,
+        lastAnswers,
+        now: serverNow(),
+        limit: "all",
+        only: mode === "failed" ? "failed" : undefined,
+      });
+      setAvailable(res.available);
     })();
-  }, [subjectId]);
+  }, [subjectId, mode]);
+
+  const totalAvailable = available
+    ? available.failed + available.learning + available.new
+    : null;
 
   if (phase === "setup") {
     return (
@@ -59,12 +83,27 @@ function StudyPage() {
             <ArrowLeft className="h-4 w-4" /> Volver
           </Link>
         </div>
-        <h1 className="font-display text-2xl font-semibold">Configura tu sesión</h1>
+        <h1 className="font-display text-2xl font-semibold">
+          {mode === "failed" ? "Repasar falladas" : "Configura tu sesión"}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {available === null
+          {totalAvailable === null
             ? "Calculando cartas disponibles…"
-            : `${available} carta${available === 1 ? "" : "s"} disponible${available === 1 ? "" : "s"} para hoy`}
+            : `${totalAvailable} carta${totalAvailable === 1 ? "" : "s"} disponible${totalAvailable === 1 ? "" : "s"} para hoy`}
         </p>
+        {available && totalAvailable ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1 text-destructive">
+              <AlertTriangle className="h-3 w-3" /> {available.failed} falladas
+            </span>
+            <span className="rounded-full border border-border px-3 py-1">
+              {available.learning} repasos
+            </span>
+            <span className="rounded-full border border-border px-3 py-1">
+              {available.new} nuevas
+            </span>
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-3">
           <QuickCount
@@ -77,7 +116,7 @@ function StudyPage() {
               key={n}
               label={`${n} cartas`}
               active={requestedCount === n}
-              disabled={available !== null && available < n}
+              disabled={totalAvailable !== null && totalAvailable < n}
               onClick={() => setRequestedCount(n)}
             />
           ))}
@@ -86,7 +125,7 @@ function StudyPage() {
             <input
               type="number"
               min={1}
-              max={available ?? undefined}
+              max={totalAvailable ?? undefined}
               placeholder="Ej: 33"
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
@@ -98,7 +137,7 @@ function StudyPage() {
         </div>
 
         <button
-          disabled={!available}
+          disabled={!totalAvailable}
           onClick={() => setPhase("session")}
           className="mt-8 w-full rounded-xl bg-primary py-3.5 font-semibold text-primary-foreground shadow-elevated disabled:opacity-60"
         >
@@ -112,6 +151,7 @@ function StudyPage() {
     return (
       <StudySession
         subjectId={subjectId}
+        mode={mode}
         requested={requestedCount}
         onFinish={() => setPhase("done")}
       />
@@ -169,10 +209,12 @@ function QuickCount({
 
 function StudySession({
   subjectId,
+  mode,
   requested,
   onFinish,
 }: {
   subjectId: string;
+  mode: StudyMode;
   requested: number | "all";
   onFinish: () => void;
 }) {
@@ -184,7 +226,8 @@ function StudySession({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [correct, setCorrect] = useState(0);
   const [incorrect, setIncorrect] = useState(0);
-  const startedAt = useRef(new Date());
+  const [breakdown, setBreakdown] = useState<QueueBreakdown | null>(null);
+  const startedAt = useRef(serverNow());
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -196,19 +239,24 @@ function StudySession({
 
   useEffect(() => {
     (async () => {
-      const now = new Date().toISOString();
+      await syncClock();
       const { data, error } = await supabase
         .from("flashcards")
-        .select(
-          "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, explanation",
-        )
-        .eq("subject_id", subjectId)
-        .eq("is_learned", false)
-        .lte("next_review_at", now);
+        .select(CARD_SELECT)
+        .eq("subject_id", subjectId);
       if (error) return toast.error(error.message);
-      const shuffled = shuffle(data ?? []);
-      const size = requested === "all" ? shuffled.length : Math.min(requested, shuffled.length);
-      setQueue(shuffled.slice(0, size));
+      const cards = (data ?? []) as Card[];
+      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
+      const result = buildDailyQueue({
+        cards,
+        lastAnswers,
+        now: serverNow(),
+        limit: requested,
+        only: mode === "failed" ? "failed" : undefined,
+      });
+      setQueue(result.queue);
+      setBreakdown(result.breakdown);
+      const size = result.queue.length;
 
       const {
         data: { user },
@@ -227,7 +275,7 @@ function StudySession({
         if (sess) setSessionId(sess.id);
       }
     })();
-  }, [subjectId, requested]);
+  }, [subjectId, requested, mode]);
 
   const current = queue?.[index];
 
@@ -279,6 +327,7 @@ function StudySession({
       await supabase.from("card_review_history").insert({
         user_id: user.id,
         flashcard_id: current.id,
+        answered_at: serverNow().toISOString(),
         study_session_id: sessionId,
         is_correct: isCorrect,
         review_type: "scheduled",
@@ -298,7 +347,7 @@ function StudySession({
         await supabase
           .from("study_sessions")
           .update({
-            completed_at: new Date().toISOString(),
+            completed_at: serverNow().toISOString(),
             duration_seconds: durationSeconds,
             cards_studied: studied,
             correct_count: correct,
@@ -357,6 +406,12 @@ function StudySession({
           <Clock className="h-4 w-4" /> {formatTime(elapsed)}
         </span>
       </header>
+
+      {breakdown && (
+        <p className="mb-3 text-xs text-muted-foreground">
+          {breakdown.failed} falladas · {breakdown.learning} repasos · {breakdown.new} nuevas
+        </p>
+      )}
 
       <div
         className="h-1 w-full overflow-hidden rounded-full bg-muted"

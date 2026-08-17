@@ -3,6 +3,8 @@
 // Any wrong answer resets to Stage 1, next review tomorrow.
 // Wrong on a learned card returns it to its subject at Stage 1, keeps historical counter.
 
+import { serverNow, startOfDay, startOfNextDay } from "@/lib/clock";
+
 export type Stage = 1 | 2 | 3 | 4 | 5;
 
 export const STAGE_LABELS: Record<Stage, string> = {
@@ -15,8 +17,13 @@ export const STAGE_LABELS: Record<Stage, string> = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Suma días y ancla el resultado a las 00:00:00 del día oficial resultante,
+ * para que las cartas queden disponibles desde el inicio de ese día.
+ */
 export function addDays(base: Date, days: number): Date {
-  return new Date(base.getTime() + days * DAY_MS);
+  if (days <= 1) return startOfNextDay(base);
+  return startOfDay(new Date(base.getTime() + days * DAY_MS));
 }
 
 export interface SrsUpdate {
@@ -32,7 +39,7 @@ export function applyAnswer(params: {
   is_learned: boolean;
   is_correct: boolean;
 }): SrsUpdate {
-  const now = new Date();
+  const now = serverNow();
   const { current_stage, is_learned, is_correct } = params;
 
   if (is_learned) {

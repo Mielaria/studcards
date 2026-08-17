@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { serverNow } from "@/lib/clock";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
@@ -249,7 +250,7 @@ function ManualForm({ subjectId }: { subjectId: string }) {
         explanation: explanation.trim() || null,
         image_url: imagePath,
         learning_stage: 1,
-        next_review_at: new Date().toISOString(),
+        next_review_at: serverNow().toISOString(),
         correct_answers_count: 0,
         is_learned: false,
       });
@@ -509,7 +510,7 @@ function AiForm({ subjectId }: { subjectId: string }) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("No auth");
-      const now = new Date().toISOString();
+      const now = serverNow().toISOString();
       // La foto de entrada de la IA sólo se guarda si decides incluirla en las cartas.
       // Cada carta recibe su propia copia en Storage para que borrar una no afecte a las demás.
       const rows = await Promise.all(
