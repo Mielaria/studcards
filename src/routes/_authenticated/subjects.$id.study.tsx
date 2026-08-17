@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { ExplanationModal } from "@/components/ExplanationModal";
 import { CardImage } from "@/components/CardImage";
-import { applyAnswer, type Stage } from "@/lib/srs";
+import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
 import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
 import { serverNow, syncClock } from "@/lib/clock";
