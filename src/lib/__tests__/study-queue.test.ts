@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { buildDailyQueue } from "@/lib/study-queue";
 import { classifyCard, countByState, type LastAnswer } from "@/lib/card-state";
 import { applyAnswer, type Stage } from "@/lib/srs";
@@ -24,7 +24,11 @@ function makeCards(n: number, prefix = "c"): Card[] {
   }));
 }
 
+vi.useFakeTimers();
+afterAll(() => vi.useRealTimers());
+
 function answerCard(card: Card, isCorrect: boolean, last: Map<string, LastAnswer>, at: Date) {
+  vi.setSystemTime(at);
   const upd = applyAnswer({
     current_stage: card.learning_stage as Stage,
     is_learned: card.is_learned,
@@ -122,7 +126,8 @@ describe("cola diaria y estados", () => {
     expect(classifyCard(card, last.get(card.id))).toBe("failed");
     expect(classifyCard(card, last.get(card.id))).not.toBe("new");
     expect(card.next_review_at).not.toBe(beforeReview);
-    expect(new Date(card.next_review_at).getTime()).toBeGreaterThan(TUE_00_01.getTime());
+    // Queda disponible a las 00:00 del miércoles (día oficial siguiente).
+    expect(card.next_review_at).toBe("2026-08-19T05:00:00.000Z");
   });
 
   it("una fallada respondida bien pasa a aprendizaje y avanza de etapa", () => {
