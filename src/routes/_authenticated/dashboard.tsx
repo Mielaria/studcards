@@ -2,7 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
-import { BookOpen, Sparkles, Plus, Play, Flame, Target } from "lucide-react";
+import { BookOpen, Sparkles, Plus, Play, Flame, Target, AlertTriangle } from "lucide-react";
+import { countByState, fetchLastAnswers } from "@/lib/card-state";
+import { serverNow } from "@/lib/clock";
+import { useOfficialDay } from "@/hooks/useOfficialDay";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -15,48 +18,23 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function Dashboard() {
-  const nowIso = new Date().toISOString();
+  const dayKeyNow = useOfficialDay();
 
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: async () => (await supabase.auth.getUser()).data.user,
   });
 
-  const { data: profile } = useQuery({
-    queryKey: ["profile"],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("username").maybeSingle();
-      return data;
-    },
-  });
-
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats", nowIso.slice(0, 10)],
+    queryKey: ["dashboard-stats", dayKeyNow],
     queryFn: async () => {
-      const [dueRes, newRes, learnedRes, totalRes] = await Promise.all([
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("is_learned", false)
-          .lte("next_review_at", new Date().toISOString()),
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("is_learned", false)
-          .eq("learning_stage", 1)
-          .eq("correct_answers_count", 0),
-        supabase
-          .from("flashcards")
-          .select("id", { count: "exact", head: true })
-          .eq("is_learned", true),
-        supabase.from("flashcards").select("id", { count: "exact", head: true }),
-      ]);
-      return {
-        due: dueRes.count ?? 0,
-        newCards: newRes.count ?? 0,
-        learned: learnedRes.count ?? 0,
-        total: totalRes.count ?? 0,
-      };
+      const { data, error } = await supabase
+        .from("flashcards")
+        .select("id, is_learned, next_review_at");
+      if (error) throw error;
+      const cards = data ?? [];
+      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
+      return countByState(cards, lastAnswers, serverNow());
     },
   });
 
@@ -66,14 +44,20 @@ function Dashboard() {
         <h1 className="font-display text-3xl font-semibold">Resumen del día</h1>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat
           icon={<Target className="h-4 w-4" />}
           label="Para hoy"
           value={stats?.due ?? 0}
           tone="primary"
         />
-        <Stat icon={<Flame className="h-4 w-4" />} label="Nuevas" value={stats?.newCards ?? 0} />
+        <Stat icon={<Flame className="h-4 w-4" />} label="Nuevas" value={stats?.new ?? 0} />
+        <Stat
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="Falladas"
+          value={stats?.failed ?? 0}
+          tone="danger"
+        />
         <Stat
           icon={<Sparkles className="h-4 w-4" />}
           label="Aprendidas"
@@ -144,14 +128,16 @@ function Stat({
   icon: React.ReactNode;
   label: string;
   value: number;
-  tone?: "primary" | "success";
+  tone?: "primary" | "success" | "danger";
 }) {
   const toneClass =
     tone === "primary"
       ? "bg-primary text-primary-foreground"
       : tone === "success"
         ? "bg-success text-success-foreground"
-        : "bg-muted text-muted-foreground";
+        : tone === "danger"
+          ? "bg-destructive text-destructive-foreground"
+          : "bg-muted text-muted-foreground";
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
       <div
