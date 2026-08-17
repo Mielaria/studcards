@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { serverNow } from "@/lib/clock";
 import { AppShell } from "@/components/AppShell";
 import { Plus, BookOpen, ChevronRight, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
@@ -47,7 +48,7 @@ function SubjectsPage() {
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: true });
       if (error) throw error;
-      const now = new Date().toISOString();
+      const now = serverNow().toISOString();
       const results = await Promise.all(
         (subs ?? []).map(async (s) => {
           const [total, due, learned] = await Promise.all([
