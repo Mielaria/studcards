@@ -307,17 +307,27 @@ function MiniStat({
   label,
   value,
   accent,
+  danger,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   accent?: boolean;
+  danger?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+    <div
+      className={`rounded-2xl border p-4 shadow-card ${
+        danger ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"
+      }`}
+    >
       <div
         className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-          accent ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          danger
+            ? "bg-destructive text-destructive-foreground"
+            : accent
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground"
         }`}
       >
         {icon}
