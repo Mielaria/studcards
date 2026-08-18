@@ -220,6 +220,7 @@ function StudySession({
   onFinish: () => void;
 }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [queue, setQueue] = useState<Card[] | null>(null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
