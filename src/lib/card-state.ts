@@ -80,9 +80,8 @@ export function countByState(
     const due = isDue(card.next_review_at, now);
     if (state === "learned") counts.learned++;
     else if (state === "new") counts.new++;
-    else if (state === "failed") {
-      if (due) counts.failed++;
-    } else counts.learning++;
+    else if (state === "failed") counts.failed++;
+    else counts.learning++;
     if (state !== "learned" && due) counts.due++;
   }
   return counts;
