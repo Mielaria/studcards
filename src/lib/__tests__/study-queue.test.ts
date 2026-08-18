@@ -115,6 +115,25 @@ describe("cola diaria y estados", () => {
     expect(available.failed).toBe(0);
   });
 
+  it("el repaso manual de falladas incluye las que aún no vencen", () => {
+    const last = new Map<string, LastAnswer>();
+    const future = makeCards(1, "f").map((c) => {
+      c.next_review_at = new Date(TUE_00_01.getTime() + 86400000).toISOString();
+      last.set(c.id, { is_correct: false, answered_at: MON_10.toISOString() });
+      return c;
+    });
+    const { queue, available } = buildDailyQueue({
+      cards: future,
+      lastAnswers: last,
+      now: TUE_00_01,
+      limit: "all",
+      only: "failed",
+      shuffleGroups: false,
+    });
+    expect(queue).toHaveLength(1);
+    expect(available.failed).toBe(1);
+  });
+
   it("una fallada que vuelve a fallar sigue en falladas y nunca vuelve a Nueva", () => {
     const [card] = makeCards(1, "x");
     const last = new Map<string, LastAnswer>();
