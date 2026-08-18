@@ -1,6 +1,7 @@
 // Construcción de la cola diaria con prioridad:
 // 1) falladas vencidas → 2) repasos de aprendizaje vencidos → 3) nuevas.
-// Las cartas cuyo next_review_at aún no llegó nunca aparecen.
+// En la cola diaria, las cartas cuyo next_review_at aún no llegó no aparecen.
+// El repaso manual de falladas sí incluye todas las falladas inmediatamente.
 
 import { classifyCard, type CardState, type LastAnswer } from "@/lib/card-state";
 import { isDue, serverNow } from "@/lib/clock";
@@ -49,7 +50,8 @@ export function buildDailyQueue<T extends QueueCard>(params: {
     const state = classifyCard(card, lastAnswers.get(card.id));
     if (state === "learned") continue;
     if (only && state !== only) continue;
-    if (!isDue(card.next_review_at, now)) continue;
+    const isManualFailedReview = only === "failed" && state === "failed";
+    if (!isManualFailedReview && !isDue(card.next_review_at, now)) continue;
     groups[state].push(card);
   }
 
