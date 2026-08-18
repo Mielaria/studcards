@@ -161,6 +161,7 @@ describe("cola diaria y estados", () => {
       return c;
     });
     const counts = countByState([...due, ...notDue], last, TUE_00_01);
-    expect(counts.failed).toBe(2);
+    expect(counts.failed).toBe(3);
+    expect(counts.due).toBe(2);
   });
 });
