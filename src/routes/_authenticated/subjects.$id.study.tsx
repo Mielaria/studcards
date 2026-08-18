@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -219,6 +220,7 @@ function StudySession({
   onFinish: () => void;
 }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [queue, setQueue] = useState<Card[] | null>(null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -356,6 +358,7 @@ function StudySession({
           })
           .eq("id", sessionId);
       }
+      await qc.invalidateQueries();
       onFinish();
       return;
     }
