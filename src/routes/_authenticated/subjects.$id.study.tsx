@@ -358,6 +358,7 @@ function StudySession({
           })
           .eq("id", sessionId);
       }
+      await qc.invalidateQueries();
       onFinish();
       return;
     }
