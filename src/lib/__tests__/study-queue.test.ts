@@ -149,7 +149,7 @@ describe("cola diaria y estados", () => {
     expect(second.breakdown.new).toBe(10);
   });
 
-  it("los contadores solo cuentan falladas vencidas", () => {
+  it("los contadores cuentan todas las falladas, vencidas o no", () => {
     const last = new Map<string, LastAnswer>();
     const due = makeCards(2, "d").map((c) => {
       last.set(c.id, { is_correct: false, answered_at: MON_10.toISOString() });
@@ -161,6 +161,7 @@ describe("cola diaria y estados", () => {
       return c;
     });
     const counts = countByState([...due, ...notDue], last, TUE_00_01);
-    expect(counts.failed).toBe(2);
+    expect(counts.failed).toBe(3);
+    expect(counts.due).toBe(2);
   });
 });

@@ -65,8 +65,9 @@ export interface StateCounts {
 }
 
 /**
- * Contadores por estado. "failed" y "due" cuentan solo cartas ya vencidas
- * según el reloj oficial.
+ * Contadores por estado. "failed" cuenta TODAS las cartas cuya última
+ * respuesta fue incorrecta (estén vencidas o no); "due" cuenta solo las
+ * disponibles hoy según el reloj oficial.
  */
 export function countByState(
   cards: StatefulCard[],
@@ -79,9 +80,8 @@ export function countByState(
     const due = isDue(card.next_review_at, now);
     if (state === "learned") counts.learned++;
     else if (state === "new") counts.new++;
-    else if (state === "failed") {
-      if (due) counts.failed++;
-    } else counts.learning++;
+    else if (state === "failed") counts.failed++;
+    else counts.learning++;
     if (state !== "learned" && due) counts.due++;
   }
   return counts;
