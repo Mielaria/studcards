@@ -65,8 +65,9 @@ export interface StateCounts {
 }
 
 /**
- * Contadores por estado. "failed" y "due" cuentan solo cartas ya vencidas
- * según el reloj oficial.
+ * Contadores por estado. "failed" cuenta TODAS las cartas cuya última
+ * respuesta fue incorrecta (estén vencidas o no); "due" cuenta solo las
+ * disponibles hoy según el reloj oficial.
  */
 export function countByState(
   cards: StatefulCard[],
