@@ -26,6 +26,20 @@ function Dashboard() {
     queryFn: async () => (await supabase.auth.getUser()).data.user,
   });
 
+  const { data: streak = 0 } = useQuery({
+    queryKey: ["streak", dayKeyNow],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("study_sessions")
+        .select("completed_at")
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return computeStreak((data ?? []).map((s) => s.completed_at as string), serverNow());
+    },
+  });
+
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats", dayKeyNow],
     queryFn: async () => {
