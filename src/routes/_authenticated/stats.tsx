@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
-import { BarChart3, Clock, Target, TrendingUp } from "lucide-react";
+import { BarChart3, Clock, Target, TrendingUp, Trash2 } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/stats")({
   head: () => ({
