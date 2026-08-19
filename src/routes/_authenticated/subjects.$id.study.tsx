@@ -307,6 +307,10 @@ function StudySession({
     if (isCorrect) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
 
+    // Repaso de falladas: práctica neutral. No cambia etapa, ni next_review_at,
+    // ni escribe historial, por lo que la carta sigue fallada y vuelve mañana.
+    if (mode === "failed") return;
+
     const update = applyAnswer({
       current_stage: current.learning_stage as Stage,
       is_learned: current.is_learned,
