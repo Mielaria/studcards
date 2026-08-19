@@ -307,6 +307,10 @@ function StudySession({
     if (isCorrect) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
 
+    // Repaso de falladas: práctica neutral. No cambia etapa, ni next_review_at,
+    // ni escribe historial, por lo que la carta sigue fallada y vuelve mañana.
+    if (mode === "failed") return;
+
     const update = applyAnswer({
       current_stage: current.learning_stage as Stage,
       is_learned: current.is_learned,
@@ -521,7 +525,11 @@ function StudySession({
           ]
         }
         explanation={current.explanation}
-        footer="Esta carta se marcó como fallada y se repasará mañana."
+        footer={
+          mode === "failed"
+            ? "Repaso de práctica: la carta sigue fallada y volverá en tu estudio de mañana."
+            : "Esta carta se marcó como fallada y se repasará mañana."
+        }
         variant="penalty"
       />
 
