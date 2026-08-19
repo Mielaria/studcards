@@ -525,7 +525,11 @@ function StudySession({
           ]
         }
         explanation={current.explanation}
-        footer="Esta carta se marcó como fallada y se repasará mañana."
+        footer={
+          mode === "failed"
+            ? "Repaso de práctica: la carta sigue fallada y volverá en tu estudio de mañana."
+            : "Esta carta se marcó como fallada y se repasará mañana."
+        }
         variant="penalty"
       />
 
