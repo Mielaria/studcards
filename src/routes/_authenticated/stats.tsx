@@ -82,13 +82,56 @@ function StatsPage() {
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <BarChart3 className="h-5 w-5" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="font-display text-2xl font-semibold">Estadísticas</h1>
           <p className="text-sm text-muted-foreground">
             Tus últimas 50 sesiones registradas.
           </p>
         </div>
+        <button
+          onClick={() => setConfirming(true)}
+          className="flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+          <span className="hidden sm:inline">Limpiar</span>
+        </button>
       </header>
+
+      {confirming && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirming(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-semibold">
+              ¿Limpiar estadísticas?
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Se borrará todo tu historial de sesiones. El progreso de tus cartas
+              (etapas, falladas y aprendidas) no se ve afectado.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setConfirming(false)}
+                className="rounded-xl border border-border py-2.5 text-sm font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={clearStats}
+                disabled={clearing}
+                className="rounded-xl bg-destructive py-2.5 text-sm font-medium text-destructive-foreground disabled:opacity-60"
+              >
+                {clearing ? "Limpiando…" : "Limpiar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard icon={<Target className="h-4 w-4" />} label="Sesiones" value={(sessions ?? []).length} />
