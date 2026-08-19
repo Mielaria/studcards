@@ -18,7 +18,30 @@ export const Route = createFileRoute("/_authenticated/stats")({
 });
 
 function StatsPage() {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  async function clearStats() {
+    setClearing(true);
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("Sesión no válida");
+      const { error } = await supabase.from("study_sessions").delete().eq("user_id", uid);
+      if (error) throw error;
+      toast.success("Estadísticas limpiadas");
+      setConfirming(false);
+      await qc.invalidateQueries({ queryKey: ["study-sessions"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudieron limpiar");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   const { data: sessions } = useQuery({
+
     queryKey: ["study-sessions"],
     queryFn: async () => {
       const { data, error } = await supabase
