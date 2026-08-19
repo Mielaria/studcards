@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { BookOpen, Sparkles, Plus, Play, Flame, Target, AlertTriangle } from "lucide-react";
 import { countByState, fetchLastAnswers } from "@/lib/card-state";
 import { serverNow } from "@/lib/clock";
+import { computeStreak } from "@/lib/streak";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -25,6 +26,20 @@ function Dashboard() {
     queryFn: async () => (await supabase.auth.getUser()).data.user,
   });
 
+  const { data: streak = 0 } = useQuery({
+    queryKey: ["streak", dayKeyNow],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("study_sessions")
+        .select("completed_at")
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return computeStreak((data ?? []).map((s) => s.completed_at as string), serverNow());
+    },
+  });
+
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats", dayKeyNow],
     queryFn: async () => {
@@ -40,8 +55,23 @@ function Dashboard() {
 
   return (
     <AppShell>
-      <header className="mb-6">
+      <header className="mb-6 flex items-start justify-between gap-4">
         <h1 className="font-display text-3xl font-semibold">Resumen del día</h1>
+        <div
+          className={`flex items-center gap-2 rounded-full border border-border px-3 py-1.5 shadow-card ${
+            streak > 0 ? "bg-primary-soft text-primary" : "bg-card text-muted-foreground"
+          }`}
+          title={
+            streak > 0
+              ? `Racha de ${streak} ${streak === 1 ? "día" : "días"}`
+              : "Termina una sesión de estudio para iniciar tu racha"
+          }
+          aria-label={`Racha: ${streak} ${streak === 1 ? "día" : "días"}`}
+        >
+          <Flame className={`h-5 w-5 ${streak > 0 ? "fill-current" : ""}`} />
+          <span className="font-display text-lg font-semibold leading-none">{streak}</span>
+          <span className="text-xs leading-none">{streak === 1 ? "día" : "días"}</span>
+        </div>
       </header>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
