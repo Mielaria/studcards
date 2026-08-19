@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { BookOpen, Sparkles, Plus, Play, Flame, Target, AlertTriangle } from "lucide-react";
 import { countByState, fetchLastAnswers } from "@/lib/card-state";
 import { serverNow } from "@/lib/clock";
+import { computeStreak } from "@/lib/streak";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
