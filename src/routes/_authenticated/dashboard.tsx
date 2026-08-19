@@ -55,8 +55,23 @@ function Dashboard() {
 
   return (
     <AppShell>
-      <header className="mb-6">
+      <header className="mb-6 flex items-start justify-between gap-4">
         <h1 className="font-display text-3xl font-semibold">Resumen del día</h1>
+        <div
+          className={`flex items-center gap-2 rounded-full border border-border px-3 py-1.5 shadow-card ${
+            streak > 0 ? "bg-primary-soft text-primary" : "bg-card text-muted-foreground"
+          }`}
+          title={
+            streak > 0
+              ? `Racha de ${streak} ${streak === 1 ? "día" : "días"}`
+              : "Termina una sesión de estudio para iniciar tu racha"
+          }
+          aria-label={`Racha: ${streak} ${streak === 1 ? "día" : "días"}`}
+        >
+          <Flame className={`h-5 w-5 ${streak > 0 ? "fill-current" : ""}`} />
+          <span className="font-display text-lg font-semibold leading-none">{streak}</span>
+          <span className="text-xs leading-none">{streak === 1 ? "día" : "días"}</span>
+        </div>
       </header>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
