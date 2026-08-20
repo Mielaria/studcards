@@ -74,7 +74,7 @@ function Dashboard() {
         </div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <Stat
           icon={<Target className="h-4 w-4" />}
           label="Para hoy"
@@ -89,6 +89,11 @@ function Dashboard() {
           tone="danger"
         />
         <Stat
+          icon={<Play className="h-4 w-4" />}
+          label="En aprendizaje"
+          value={stats?.learning ?? 0}
+        />
+        <Stat
           icon={<Sparkles className="h-4 w-4" />}
           label="Aprendidas"
           value={stats?.learned ?? 0}
@@ -96,6 +101,7 @@ function Dashboard() {
         />
         <Stat icon={<BookOpen className="h-4 w-4" />} label="Totales" value={stats?.total ?? 0} />
       </section>
+
 
       <section className="mt-8 grid gap-3 md:grid-cols-2">
         <Link
