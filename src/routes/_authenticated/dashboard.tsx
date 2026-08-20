@@ -74,7 +74,7 @@ function Dashboard() {
         </div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <Stat
           icon={<Target className="h-4 w-4" />}
           label="Para hoy"
@@ -89,6 +89,11 @@ function Dashboard() {
           tone="danger"
         />
         <Stat
+          icon={<Play className="h-4 w-4" />}
+          label="En aprendizaje"
+          value={stats?.learning ?? 0}
+        />
+        <Stat
           icon={<Sparkles className="h-4 w-4" />}
           label="Aprendidas"
           value={stats?.learned ?? 0}
@@ -96,6 +101,7 @@ function Dashboard() {
         />
         <Stat icon={<BookOpen className="h-4 w-4" />} label="Totales" value={stats?.total ?? 0} />
       </section>
+
 
       <section className="mt-8 grid gap-3 md:grid-cols-2">
         <Link
@@ -168,15 +174,22 @@ function Stat({
         : tone === "danger"
           ? "bg-destructive text-destructive-foreground"
           : "bg-muted text-muted-foreground";
+  const display = Math.min(Math.max(value, 0), 99999).toLocaleString("es-CO");
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-      <div
-        className={`flex h-8 w-8 items-center justify-center rounded-lg ${toneClass}`}
-      >
+    <div className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${toneClass}`}>
         {icon}
       </div>
-      <div className="mt-3 font-display text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className="mt-3 font-display text-xl font-semibold tabular-nums leading-tight tracking-tight sm:text-2xl"
+        title={String(value)}
+      >
+        {display}
+      </div>
+      <div className="truncate text-xs text-muted-foreground" title={label}>
+        {label}
+      </div>
     </div>
   );
 }
+
