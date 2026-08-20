@@ -16,6 +16,7 @@ import {
   Layers,
   Download,
   AlertTriangle,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportSubjectBackup, downloadJson } from "@/lib/backup";
@@ -316,32 +317,41 @@ function MiniStat({
   value,
   accent,
   danger,
+  success,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   accent?: boolean;
   danger?: boolean;
+  success?: boolean;
 }) {
+  const toneClass = danger
+    ? "bg-destructive text-destructive-foreground"
+    : accent
+      ? "bg-primary text-primary-foreground"
+      : success
+        ? "bg-success text-success-foreground"
+        : "bg-muted text-muted-foreground";
+  const display = Math.min(Math.max(value, 0), 99999).toLocaleString("es-CO");
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-card ${
+      className={`min-w-0 rounded-2xl border p-4 shadow-card ${
         danger ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"
       }`}
     >
-      <div
-        className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-          danger
-            ? "bg-destructive text-destructive-foreground"
-            : accent
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground"
-        }`}
-      >
+      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${toneClass}`}>
         {icon}
       </div>
-      <div className="mt-2 font-display text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className="mt-3 font-display text-xl font-semibold tabular-nums leading-tight tracking-tight sm:text-2xl"
+        title={String(value)}
+      >
+        {display}
+      </div>
+      <div className="truncate text-xs text-muted-foreground" title={label}>
+        {label}
+      </div>
     </div>
   );
 }
@@ -349,6 +359,7 @@ function MiniStat({
 function CardList({ subjectId }: { subjectId: string }) {
   const qc = useQueryClient();
   const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: cards } = useQuery({
     queryKey: ["subject-cards", subjectId],
@@ -388,6 +399,11 @@ function CardList({ subjectId }: { subjectId: string }) {
     },
   });
 
+  const query = search.trim().toLowerCase();
+  const filtered = (cards ?? []).filter((c) =>
+    query ? c.question.toLowerCase().includes(query) : true,
+  );
+
   if (!cards) return null;
   if (cards.length === 0)
     return (
@@ -398,9 +414,26 @@ function CardList({ subjectId }: { subjectId: string }) {
 
   return (
     <section className="mt-8">
-      <h2 className="mb-3 font-display text-lg font-semibold">Cartas</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold">Cartas</h2>
+        <div className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar carta por nombre…"
+            aria-label="Buscar carta"
+            className="w-full rounded-xl border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+          />
+        </div>
+      </div>
+      {filtered.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border bg-card/60 p-4 text-center text-sm text-muted-foreground">
+          Sin resultados para “{search}”.
+        </p>
+      ) : (
       <ul className="grid gap-2">
-        {cards.map((c) => (
+        {filtered.map((c) => (
           <li
             key={c.id}
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-sm"
@@ -433,6 +466,7 @@ function CardList({ subjectId }: { subjectId: string }) {
           </li>
         ))}
       </ul>
+      )}
       {editingCard && (
         <EditCardModal
           cardId={editingCard}
