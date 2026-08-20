@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import { BookOpen, Sparkles, Plus, Play, Flame, Target, AlertTriangle } from "lucide-react";
 import { countByState, fetchLastAnswers } from "@/lib/card-state";
@@ -43,11 +44,17 @@ function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats", dayKeyNow],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select("id, is_learned, next_review_at");
-      if (error) throw error;
-      const cards = data ?? [];
+      const cards = await fetchAllRows<{
+        id: string;
+        is_learned: boolean;
+        next_review_at: string;
+      }>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select("id, is_learned, next_review_at")
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
       return countByState(cards, lastAnswers, serverNow());
     },

@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import {
   ArrowLeft,
@@ -15,6 +16,7 @@ import {
   Layers,
   Download,
   AlertTriangle,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportSubjectBackup, downloadJson } from "@/lib/backup";
@@ -59,12 +61,18 @@ function SubjectDetail() {
   const { data: counts } = useQuery({
     queryKey: ["subject-counts", id, dayKeyNow],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select("id, is_learned, next_review_at")
-        .eq("subject_id", id);
-      if (error) throw error;
-      const cards = data ?? [];
+      const cards = await fetchAllRows<{
+        id: string;
+        is_learned: boolean;
+        next_review_at: string;
+      }>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select("id, is_learned, next_review_at")
+          .eq("subject_id", id)
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
       return countByState(cards, lastAnswers, serverNow());
     },
@@ -236,7 +244,7 @@ function SubjectDetail() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <MiniStat icon={<Target className="h-4 w-4" />} label="Para hoy" value={counts?.due ?? 0} accent />
         <MiniStat icon={<BookOpen className="h-4 w-4" />} label="Nuevas" value={counts?.new ?? 0} />
         <MiniStat
@@ -246,7 +254,8 @@ function SubjectDetail() {
           danger
         />
         <MiniStat icon={<Layers className="h-4 w-4" />} label="En aprendizaje" value={counts?.learning ?? 0} />
-        <MiniStat icon={<Sparkles className="h-4 w-4" />} label="Aprendidas" value={counts?.learned ?? 0} />
+        <MiniStat icon={<Sparkles className="h-4 w-4" />} label="Aprendidas" value={counts?.learned ?? 0} success />
+        <MiniStat icon={<Layers className="h-4 w-4" />} label="Totales" value={counts?.total ?? 0} />
       </section>
 
       {(counts?.failed ?? 0) > 0 && (
@@ -308,32 +317,41 @@ function MiniStat({
   value,
   accent,
   danger,
+  success,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   accent?: boolean;
   danger?: boolean;
+  success?: boolean;
 }) {
+  const toneClass = danger
+    ? "bg-destructive text-destructive-foreground"
+    : accent
+      ? "bg-primary text-primary-foreground"
+      : success
+        ? "bg-success text-success-foreground"
+        : "bg-muted text-muted-foreground";
+  const display = Math.min(Math.max(value, 0), 99999).toLocaleString("es-CO");
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-card ${
+      className={`min-w-0 rounded-2xl border p-4 shadow-card ${
         danger ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"
       }`}
     >
-      <div
-        className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-          danger
-            ? "bg-destructive text-destructive-foreground"
-            : accent
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground"
-        }`}
-      >
+      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${toneClass}`}>
         {icon}
       </div>
-      <div className="mt-2 font-display text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className="mt-3 font-display text-xl font-semibold tabular-nums leading-tight tracking-tight sm:text-2xl"
+        title={String(value)}
+      >
+        {display}
+      </div>
+      <div className="truncate text-xs text-muted-foreground" title={label}>
+        {label}
+      </div>
     </div>
   );
 }
@@ -341,17 +359,25 @@ function MiniStat({
 function CardList({ subjectId }: { subjectId: string }) {
   const qc = useQueryClient();
   const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: cards } = useQuery({
     queryKey: ["subject-cards", subjectId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select("id, question, is_learned, learning_stage, correct_answers_count")
-        .eq("subject_id", subjectId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      return await fetchAllRows<{
+        id: string;
+        question: string;
+        is_learned: boolean;
+        learning_stage: number;
+        correct_answers_count: number;
+      }>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select("id, question, is_learned, learning_stage, correct_answers_count")
+          .eq("subject_id", subjectId)
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
     },
   });
 
@@ -373,6 +399,11 @@ function CardList({ subjectId }: { subjectId: string }) {
     },
   });
 
+  const query = search.trim().toLowerCase();
+  const filtered = (cards ?? []).filter((c) =>
+    query ? c.question.toLowerCase().includes(query) : true,
+  );
+
   if (!cards) return null;
   if (cards.length === 0)
     return (
@@ -383,9 +414,26 @@ function CardList({ subjectId }: { subjectId: string }) {
 
   return (
     <section className="mt-8">
-      <h2 className="mb-3 font-display text-lg font-semibold">Cartas</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold">Cartas</h2>
+        <div className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar carta por nombre…"
+            aria-label="Buscar carta"
+            className="w-full rounded-xl border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+          />
+        </div>
+      </div>
+      {filtered.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border bg-card/60 p-4 text-center text-sm text-muted-foreground">
+          Sin resultados para “{search}”.
+        </p>
+      ) : (
       <ul className="grid gap-2">
-        {cards.map((c) => (
+        {filtered.map((c) => (
           <li
             key={c.id}
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-sm"
@@ -418,6 +466,7 @@ function CardList({ subjectId }: { subjectId: string }) {
           </li>
         ))}
       </ul>
+      )}
       {editingCard && (
         <EditCardModal
           cardId={editingCard}

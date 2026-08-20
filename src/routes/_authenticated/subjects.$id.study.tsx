@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import { ExplanationModal } from "@/components/ExplanationModal";
 import { CardImage } from "@/components/CardImage";
@@ -51,11 +52,18 @@ function StudyPage() {
   useEffect(() => {
     (async () => {
       await syncClock();
-      const { data } = await supabase
-        .from("flashcards")
-        .select("id, is_learned, next_review_at")
-        .eq("subject_id", subjectId);
-      const cards = data ?? [];
+      const cards = await fetchAllRows<{
+        id: string;
+        is_learned: boolean;
+        next_review_at: string;
+      }>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select("id, is_learned, next_review_at")
+          .eq("subject_id", subjectId)
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
       const res = buildDailyQueue({
         cards,
@@ -242,12 +250,19 @@ function StudySession({
   useEffect(() => {
     (async () => {
       await syncClock();
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select(CARD_SELECT)
-        .eq("subject_id", subjectId);
-      if (error) return toast.error(error.message);
-      const cards = (data ?? []) as Card[];
+      let cards: Card[];
+      try {
+        cards = (await fetchAllRows<unknown>((from, to) =>
+          supabase
+            .from("flashcards")
+            .select(CARD_SELECT)
+            .eq("subject_id", subjectId)
+            .order("created_at", { ascending: false })
+            .range(from, to),
+        )) as Card[];
+      } catch (e) {
+        return toast.error((e as Error).message);
+      }
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
       const result = buildDailyQueue({
         cards,

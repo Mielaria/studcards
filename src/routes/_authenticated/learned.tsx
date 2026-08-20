@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
@@ -48,14 +49,16 @@ function LearnedPage() {
   const { data: all } = useQuery({
     queryKey: ["learned-cards"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select(
-          "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, subject_id",
-        )
-        .eq("is_learned", true);
-      if (error) throw error;
-      return data as Card[];
+      return (await fetchAllRows<unknown>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select(
+            "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, subject_id",
+          )
+          .eq("is_learned", true)
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      )) as Card[];
     },
   });
 

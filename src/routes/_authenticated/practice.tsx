@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import { ExplanationModal } from "@/components/ExplanationModal";
 import { CardImage } from "@/components/CardImage";
@@ -62,13 +63,19 @@ function PracticePage() {
   }, [session]);
 
   async function start() {
-    let q = supabase
-      .from("flashcards")
-      .select("id, question, option_1, option_2, option_3, option_4, correct_option, image_url, explanation, subject_id");
-    if (scope !== "all") q = q.eq("subject_id", scope);
-    const { data, error } = await q;
-    if (error) return toast.error(error.message);
-    const pool = shuffle((data ?? []) as Card[]);
+    let rows: unknown[];
+    try {
+      rows = await fetchAllRows<unknown>((from, to) => {
+        let q = supabase
+          .from("flashcards")
+          .select("id, question, option_1, option_2, option_3, option_4, correct_option, image_url, explanation, subject_id");
+        if (scope !== "all") q = q.eq("subject_id", scope);
+        return q.order("created_at", { ascending: false }).range(from, to);
+      });
+    } catch (e) {
+      return toast.error((e as Error).message);
+    }
+    const pool = shuffle(rows as Card[]);
     if (pool.length === 0) return toast.error("No hay cartas para repasar");
     const size = count === "all" ? pool.length : Math.min(count, pool.length);
     setSession(pool.slice(0, size));
