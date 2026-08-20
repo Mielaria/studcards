@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import {
   ArrowLeft,
@@ -59,12 +60,18 @@ function SubjectDetail() {
   const { data: counts } = useQuery({
     queryKey: ["subject-counts", id, dayKeyNow],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select("id, is_learned, next_review_at")
-        .eq("subject_id", id);
-      if (error) throw error;
-      const cards = data ?? [];
+      const cards = await fetchAllRows<{
+        id: string;
+        is_learned: boolean;
+        next_review_at: string;
+      }>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select("id, is_learned, next_review_at")
+          .eq("subject_id", id)
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
       return countByState(cards, lastAnswers, serverNow());
     },
@@ -345,13 +352,20 @@ function CardList({ subjectId }: { subjectId: string }) {
   const { data: cards } = useQuery({
     queryKey: ["subject-cards", subjectId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("flashcards")
-        .select("id, question, is_learned, learning_stage, correct_answers_count")
-        .eq("subject_id", subjectId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      return await fetchAllRows<{
+        id: string;
+        question: string;
+        is_learned: boolean;
+        learning_stage: number;
+        correct_answers_count: number;
+      }>((from, to) =>
+        supabase
+          .from("flashcards")
+          .select("id, question, is_learned, learning_stage, correct_answers_count")
+          .eq("subject_id", subjectId)
+          .order("created_at", { ascending: false })
+          .range(from, to),
+      );
     },
   });
 
