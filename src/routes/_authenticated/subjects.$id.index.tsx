@@ -243,7 +243,7 @@ function SubjectDetail() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <MiniStat icon={<Target className="h-4 w-4" />} label="Para hoy" value={counts?.due ?? 0} accent />
         <MiniStat icon={<BookOpen className="h-4 w-4" />} label="Nuevas" value={counts?.new ?? 0} />
         <MiniStat
@@ -253,7 +253,8 @@ function SubjectDetail() {
           danger
         />
         <MiniStat icon={<Layers className="h-4 w-4" />} label="En aprendizaje" value={counts?.learning ?? 0} />
-        <MiniStat icon={<Sparkles className="h-4 w-4" />} label="Aprendidas" value={counts?.learned ?? 0} />
+        <MiniStat icon={<Sparkles className="h-4 w-4" />} label="Aprendidas" value={counts?.learned ?? 0} success />
+        <MiniStat icon={<Layers className="h-4 w-4" />} label="Totales" value={counts?.total ?? 0} />
       </section>
 
       {(counts?.failed ?? 0) > 0 && (
