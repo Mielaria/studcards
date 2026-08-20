@@ -3,6 +3,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { isDue, serverNow } from "@/lib/clock";
+import { fetchAllRows } from "@/lib/fetch-all";
 
 export type CardState = "new" | "failed" | "learning" | "learned";
 
@@ -36,13 +37,19 @@ export async function fetchLastAnswers(
   const CHUNK = 200;
   for (let i = 0; i < cardIds.length; i += CHUNK) {
     const chunk = cardIds.slice(i, i + CHUNK);
-    const { data, error } = await supabase
-      .from("card_review_history")
-      .select("flashcard_id, is_correct, answered_at")
-      .in("flashcard_id", chunk)
-      .order("answered_at", { ascending: false });
-    if (error) throw error;
-    for (const row of data ?? []) {
+    const data = await fetchAllRows<{
+      flashcard_id: string;
+      is_correct: boolean;
+      answered_at: string;
+    }>((from, to) =>
+      supabase
+        .from("card_review_history")
+        .select("flashcard_id, is_correct, answered_at")
+        .in("flashcard_id", chunk)
+        .order("answered_at", { ascending: false })
+        .range(from, to),
+    );
+    for (const row of data) {
       const prev = map.get(row.flashcard_id);
       if (!prev || new Date(row.answered_at) > new Date(prev.answered_at)) {
         map.set(row.flashcard_id, {
