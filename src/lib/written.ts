@@ -20,8 +20,25 @@ export function normalizeAnswer(value: string): string {
     .replace(/\s+/g, " ");
 }
 
-/** ¿Coincide la respuesta escrita con el texto de la opción correcta? */
+/**
+ * Formas válidas de una respuesta: la opción correcta puede traer varias
+ * alternativas separadas por "/", ";" o "|" (p. ej. "color/colour").
+ */
+export function correctAlternatives(correct: string): string[] {
+  return correct
+    .split(/[/;|]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * ¿Coincide la respuesta escrita con el texto de la opción correcta?
+ * Acepta cualquiera de las formas válidas de esa opción.
+ */
 export function answersMatch(input: string, correct: string): boolean {
   const normalized = normalizeAnswer(input);
-  return normalized.length > 0 && normalized === normalizeAnswer(correct);
+  if (normalized.length === 0) return false;
+  return correctAlternatives(correct).some(
+    (alt) => normalizeAnswer(alt) === normalized,
+  );
 }

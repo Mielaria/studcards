@@ -34,6 +34,13 @@ describe("answersMatch", () => {
   it("rechaza respuesta vacía", () => {
     expect(answersMatch("   ", "apple")).toBe(false);
   });
+
+  it("acepta formas alternativas separadas por /, ; o |", () => {
+    expect(answersMatch("colour", "color/colour")).toBe(true);
+    expect(answersMatch("color", "color/colour")).toBe(true);
+    expect(answersMatch("grey", "gray; grey")).toBe(true);
+    expect(answersMatch("gris", "gray; grey")).toBe(false);
+  });
 });
 
 describe("sorteo de modalidad", () => {
