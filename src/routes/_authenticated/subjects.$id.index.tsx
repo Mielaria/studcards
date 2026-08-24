@@ -396,13 +396,8 @@ function CardList({ subjectId }: { subjectId: string }) {
     },
   });
 
-  const query = search.trim().toLowerCase();
-  const filtered = (cards ?? []).filter((c) =>
-    query ? c.question.toLowerCase().includes(query) : true,
-  );
-
-  if (!cards) return null;
-  if (cards.length === 0)
+  if (!data) return null;
+  if (cards.length === 0 && !debounced)
     return (
       <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/60 p-6 text-center text-sm text-muted-foreground">
         Aún no tienes cartas en esta materia.
@@ -424,13 +419,13 @@ function CardList({ subjectId }: { subjectId: string }) {
           />
         </div>
       </div>
-      {filtered.length === 0 ? (
+      {cards.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-card/60 p-4 text-center text-sm text-muted-foreground">
-          Sin resultados para “{search}”.
+          Sin resultados para “{debounced}”.
         </p>
       ) : (
       <ul className="grid gap-2">
-        {filtered.map((c) => (
+        {cards.map((c) => (
           <li
             key={c.id}
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-sm"
@@ -463,6 +458,15 @@ function CardList({ subjectId }: { subjectId: string }) {
           </li>
         ))}
       </ul>
+      )}
+      {hasNextPage && (
+        <button
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="mt-3 w-full rounded-xl border border-border bg-card py-2.5 text-sm font-medium disabled:opacity-60"
+        >
+          {isFetchingNextPage ? "Cargando…" : "Cargar más"}
+        </button>
       )}
       {editingCard && (
         <EditCardModal
