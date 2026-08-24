@@ -517,36 +517,83 @@ function StudySession({
           {current.question}
         </h2>
 
-        <ul className="mt-5 grid gap-2">
-          {shuffledOptions.map(({ n, text }) => {
-            const isThis = selected === n;
-            const isRight = n === current.correct_option;
-            let styles = "border-border bg-background";
-            if (answered) {
-              if (isRight) styles = "border-success bg-success/10 text-success-foreground";
-              else if (isThis) styles = "border-destructive bg-destructive/10";
-              else styles = "border-border bg-background opacity-60";
-            }
-            return (
-              <li key={n}>
+        {isWritten ? (
+          <div className="mt-5">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <PenLine className="h-3.5 w-3.5" /> Respuesta escrita — escribe la
+              opción correcta
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitWritten();
+              }}
+              className="flex gap-2"
+            >
+              <input
+                value={writtenInput}
+                onChange={(e) => setWrittenInput(e.target.value)}
+                disabled={answered}
+                placeholder="Escribe tu respuesta…"
+                aria-label="Tu respuesta"
+                autoFocus
+                className={`min-w-0 flex-1 rounded-xl border px-3.5 py-3 text-sm outline-none ${
+                  answered
+                    ? isCorrect
+                      ? "border-success bg-success/10"
+                      : "border-destructive bg-destructive/10"
+                    : "border-input bg-background focus:border-primary"
+                }`}
+              />
+              {!answered && (
                 <button
-                  disabled={answered}
-                  onClick={() => answer(n)}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-sm transition-colors ${styles}`}
+                  type="submit"
+                  disabled={!writtenInput.trim()}
+                  className="rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
                 >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs font-semibold">
-                    {String.fromCharCode(64 + shuffledOptions.findIndex((o) => o.n === n) + 1)}
-                  </span>
-                  <span className="flex-1">{text}</span>
-                  {answered && isRight && <Check className="h-4 w-4 text-success" />}
-                  {answered && isThis && !isRight && (
-                    <X className="h-4 w-4 text-destructive" />
-                  )}
+                  Comprobar
                 </button>
-              </li>
-            );
-          })}
-        </ul>
+              )}
+            </form>
+            {answered && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Respuesta correcta:{" "}
+                <span className="font-medium text-foreground">{correctText}</span>
+              </p>
+            )}
+          </div>
+        ) : (
+          <ul className="mt-5 grid gap-2">
+            {shuffledOptions.map(({ n, text }) => {
+              const isThis = selected === n;
+              const isRight = n === current.correct_option;
+              let styles = "border-border bg-background";
+              if (answered) {
+                if (isRight) styles = "border-success bg-success/10 text-success-foreground";
+                else if (isThis) styles = "border-destructive bg-destructive/10";
+                else styles = "border-border bg-background opacity-60";
+              }
+              return (
+                <li key={n}>
+                  <button
+                    disabled={answered}
+                    onClick={() => answer(n)}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-sm transition-colors ${styles}`}
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs font-semibold">
+                      {String.fromCharCode(64 + shuffledOptions.findIndex((o) => o.n === n) + 1)}
+                    </span>
+                    <span className="flex-1">{text}</span>
+                    {answered && isRight && <Check className="h-4 w-4 text-success" />}
+                    {answered && isThis && !isRight && (
+                      <X className="h-4 w-4 text-destructive" />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
         {answered && (
           <div
