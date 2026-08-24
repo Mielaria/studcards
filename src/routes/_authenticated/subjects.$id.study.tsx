@@ -9,8 +9,10 @@ import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
 import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
+import { fetchCardsByIds } from "@/lib/card-fetch";
+import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
 import { serverNow, syncClock } from "@/lib/clock";
-import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle, PenLine } from "lucide-react";
 import { toast } from "sonner";
 
 type StudyMode = "all" | "failed";
@@ -250,46 +252,59 @@ function StudySession({
   useEffect(() => {
     (async () => {
       await syncClock();
-      let cards: Card[];
       try {
-        cards = (await fetchAllRows<unknown>((from, to) =>
+        // 1) Solo metadatos ligeros para decidir la cola (miles de cartas OK).
+        const light = await fetchAllRows<{
+          id: string;
+          is_learned: boolean;
+          next_review_at: string;
+        }>((from, to) =>
           supabase
             .from("flashcards")
-            .select(CARD_SELECT)
+            .select("id, is_learned, next_review_at")
             .eq("subject_id", subjectId)
             .order("created_at", { ascending: false })
             .range(from, to),
-        )) as Card[];
-      } catch (e) {
-        return toast.error((e as Error).message);
-      }
-      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
-      const result = buildDailyQueue({
-        cards,
-        lastAnswers,
-        now: serverNow(),
-        limit: requested,
-        only: mode === "failed" ? "failed" : undefined,
-      });
-      setQueue(result.queue);
-      setBreakdown(result.breakdown);
-      const size = result.queue.length;
+        );
+        const lastAnswers = await fetchLastAnswers(light.map((c) => c.id));
+        const result = buildDailyQueue({
+          cards: light,
+          lastAnswers,
+          now: serverNow(),
+          limit: requested,
+          only: mode === "failed" ? "failed" : undefined,
+        });
+        setBreakdown(result.breakdown);
+        // 2) Contenido completo SOLO de las cartas que entran en la sesión.
+        const full = await fetchCardsByIds<Card>(
+          CARD_SELECT,
+          result.queue.map((c) => c.id),
+        );
+        const byId = new Map(full.map((c) => [c.id, c]));
+        const queue = result.queue
+          .map((c) => byId.get(c.id))
+          .filter((c): c is Card => Boolean(c));
+        setQueue(queue);
+        const size = queue.length;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: sess } = await supabase
-          .from("study_sessions")
-          .insert({
-            user_id: user.id,
-            session_type: "subject",
-            subject_id: subjectId,
-            cards_requested: size,
-          })
-          .select("id")
-          .single();
-        if (sess) setSessionId(sess.id);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const { data: sess } = await supabase
+            .from("study_sessions")
+            .insert({
+              user_id: user.id,
+              session_type: "subject",
+              subject_id: subjectId,
+              cards_requested: size,
+            })
+            .select("id")
+            .single();
+          if (sess) setSessionId(sess.id);
+        }
+      } catch (e) {
+        toast.error((e as Error).message);
       }
     })();
   }, [subjectId, requested, mode]);
