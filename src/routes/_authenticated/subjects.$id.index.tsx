@@ -1,8 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import {
   ArrowLeft,
@@ -22,8 +21,7 @@ import { toast } from "sonner";
 import { exportSubjectBackup, downloadJson } from "@/lib/backup";
 import { EditCardModal } from "@/components/EditCardModal";
 import { CARD_BUCKET, removeImages } from "@/lib/card-images";
-import { countByState, fetchLastAnswers } from "@/lib/card-state";
-import { serverNow } from "@/lib/clock";
+import { fetchStateCounts } from "@/lib/card-state";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
 
 
@@ -58,24 +56,11 @@ function SubjectDetail() {
 
   const dayKeyNow = useOfficialDay();
 
+  // Contadores calculados en servidor (RPC get_card_state_counts) con
+  // fallback automático si la RPC aún no existe.
   const { data: counts } = useQuery({
     queryKey: ["subject-counts", id, dayKeyNow],
-    queryFn: async () => {
-      const cards = await fetchAllRows<{
-        id: string;
-        is_learned: boolean;
-        next_review_at: string;
-      }>((from, to) =>
-        supabase
-          .from("flashcards")
-          .select("id, is_learned, next_review_at")
-          .eq("subject_id", id)
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      );
-      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
-      return countByState(cards, lastAnswers, serverNow());
-    },
+    queryFn: () => fetchStateCounts(id),
   });
 
   const updateSubject = useMutation({
