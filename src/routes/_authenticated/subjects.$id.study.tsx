@@ -9,8 +9,10 @@ import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
 import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
+import { fetchCardsByIds } from "@/lib/card-fetch";
+import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
 import { serverNow, syncClock } from "@/lib/clock";
-import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle, PenLine } from "lucide-react";
 import { toast } from "sonner";
 
 type StudyMode = "all" | "failed";
@@ -232,6 +234,8 @@ function StudySession({
   const [queue, setQueue] = useState<Card[] | null>(null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  const [writtenInput, setWrittenInput] = useState("");
+  const [writtenResult, setWrittenResult] = useState<boolean | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [correct, setCorrect] = useState(0);
@@ -250,46 +254,59 @@ function StudySession({
   useEffect(() => {
     (async () => {
       await syncClock();
-      let cards: Card[];
       try {
-        cards = (await fetchAllRows<unknown>((from, to) =>
+        // 1) Solo metadatos ligeros para decidir la cola (miles de cartas OK).
+        const light = await fetchAllRows<{
+          id: string;
+          is_learned: boolean;
+          next_review_at: string;
+        }>((from, to) =>
           supabase
             .from("flashcards")
-            .select(CARD_SELECT)
+            .select("id, is_learned, next_review_at")
             .eq("subject_id", subjectId)
             .order("created_at", { ascending: false })
             .range(from, to),
-        )) as Card[];
-      } catch (e) {
-        return toast.error((e as Error).message);
-      }
-      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
-      const result = buildDailyQueue({
-        cards,
-        lastAnswers,
-        now: serverNow(),
-        limit: requested,
-        only: mode === "failed" ? "failed" : undefined,
-      });
-      setQueue(result.queue);
-      setBreakdown(result.breakdown);
-      const size = result.queue.length;
+        );
+        const lastAnswers = await fetchLastAnswers(light.map((c) => c.id));
+        const result = buildDailyQueue({
+          cards: light,
+          lastAnswers,
+          now: serverNow(),
+          limit: requested,
+          only: mode === "failed" ? "failed" : undefined,
+        });
+        setBreakdown(result.breakdown);
+        // 2) Contenido completo SOLO de las cartas que entran en la sesión.
+        const full = await fetchCardsByIds<Card>(
+          CARD_SELECT,
+          result.queue.map((c) => c.id),
+        );
+        const byId = new Map(full.map((c) => [c.id, c]));
+        const queue = result.queue
+          .map((c) => byId.get(c.id))
+          .filter((c): c is Card => Boolean(c));
+        setQueue(queue);
+        const size = queue.length;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: sess } = await supabase
-          .from("study_sessions")
-          .insert({
-            user_id: user.id,
-            session_type: "subject",
-            subject_id: subjectId,
-            cards_requested: size,
-          })
-          .select("id")
-          .single();
-        if (sess) setSessionId(sess.id);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const { data: sess } = await supabase
+            .from("study_sessions")
+            .insert({
+              user_id: user.id,
+              session_type: "subject",
+              subject_id: subjectId,
+              cards_requested: size,
+            })
+            .select("id")
+            .single();
+          if (sess) setSessionId(sess.id);
+        }
+      } catch (e) {
+        toast.error((e as Error).message);
       }
     })();
   }, [subjectId, requested, mode]);
@@ -307,18 +324,23 @@ function StudySession({
     return shuffle(opts);
   }, [current?.id]);
 
-  async function revealAnswer() {
-    if (!current) return;
-    setShowExplanation(true);
-    if (selected !== null) return;
-    // Ver la respuesta cuenta como fallo: vuelve a Etapa 1 (mañana).
-    await answer(0);
-  }
+  // La modalidad (opción múltiple vs respuesta escrita) se sortea en CADA
+  // aparición de la carta y NUNCA se guarda en Supabase: la misma carta puede
+  // aparecer como opción múltiple una vez y como respuesta escrita otra.
+  const isWritten = useMemo(
+    () => Math.random() < WRITTEN_ANSWER_PROBABILITY,
+    [current?.id],
+  );
+  const correctText = current
+    ? [current.option_1, current.option_2, current.option_3, current.option_4][
+        current.correct_option - 1
+      ]
+    : "";
 
-  async function answer(optionN: number) {
-    if (!current || selected !== null) return;
-    setSelected(optionN);
-    const isCorrect = optionN === current.correct_option;
+  // Registra el resultado (acierto/fallo) con la MISMA lógica SRS para
+  // opción múltiple y respuesta escrita.
+  async function registerResult(isCorrect: boolean) {
+    if (!current) return;
     if (isCorrect) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
 
@@ -358,6 +380,30 @@ function StudySession({
     }
   }
 
+  async function answer(optionN: number) {
+    if (!current || selected !== null) return;
+    setSelected(optionN);
+    await registerResult(optionN === current.correct_option);
+  }
+
+  async function submitWritten() {
+    if (!current || writtenResult !== null) return;
+    if (!writtenInput.trim()) return;
+    const ok = answersMatch(writtenInput, correctText);
+    setWrittenResult(ok);
+    await registerResult(ok);
+  }
+
+  async function revealAnswer() {
+    if (!current) return;
+    setShowExplanation(true);
+    if (selected !== null || writtenResult !== null) return;
+    // Ver la respuesta cuenta como fallo: vuelve a Etapa 1 (mañana).
+    if (isWritten) setWrittenResult(false);
+    else setSelected(0);
+    await registerResult(false);
+  }
+
   async function next() {
     if (!queue) return;
     if (index + 1 >= queue.length) {
@@ -382,6 +428,8 @@ function StudySession({
       return;
     }
     setSelected(null);
+    setWrittenInput("");
+    setWrittenResult(null);
     setShowExplanation(false);
     setIndex((i) => i + 1);
   }
@@ -412,8 +460,11 @@ function StudySession({
 
   if (!current) return null;
 
-  const answered = selected !== null;
-  const isCorrect = answered && selected === current.correct_option;
+  const answered = selected !== null || writtenResult !== null;
+  const isCorrect =
+    selected !== null
+      ? selected === current.correct_option
+      : writtenResult === true;
   const totalStudied = correct + incorrect;
   const finishing = answered && index + 1 >= queue.length;
 
@@ -466,36 +517,83 @@ function StudySession({
           {current.question}
         </h2>
 
-        <ul className="mt-5 grid gap-2">
-          {shuffledOptions.map(({ n, text }) => {
-            const isThis = selected === n;
-            const isRight = n === current.correct_option;
-            let styles = "border-border bg-background";
-            if (answered) {
-              if (isRight) styles = "border-success bg-success/10 text-success-foreground";
-              else if (isThis) styles = "border-destructive bg-destructive/10";
-              else styles = "border-border bg-background opacity-60";
-            }
-            return (
-              <li key={n}>
+        {isWritten ? (
+          <div className="mt-5">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <PenLine className="h-3.5 w-3.5" /> Respuesta escrita — escribe la
+              opción correcta
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitWritten();
+              }}
+              className="flex gap-2"
+            >
+              <input
+                value={writtenInput}
+                onChange={(e) => setWrittenInput(e.target.value)}
+                disabled={answered}
+                placeholder="Escribe tu respuesta…"
+                aria-label="Tu respuesta"
+                autoFocus
+                className={`min-w-0 flex-1 rounded-xl border px-3.5 py-3 text-sm outline-none ${
+                  answered
+                    ? isCorrect
+                      ? "border-success bg-success/10"
+                      : "border-destructive bg-destructive/10"
+                    : "border-input bg-background focus:border-primary"
+                }`}
+              />
+              {!answered && (
                 <button
-                  disabled={answered}
-                  onClick={() => answer(n)}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-sm transition-colors ${styles}`}
+                  type="submit"
+                  disabled={!writtenInput.trim()}
+                  className="rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
                 >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs font-semibold">
-                    {String.fromCharCode(64 + shuffledOptions.findIndex((o) => o.n === n) + 1)}
-                  </span>
-                  <span className="flex-1">{text}</span>
-                  {answered && isRight && <Check className="h-4 w-4 text-success" />}
-                  {answered && isThis && !isRight && (
-                    <X className="h-4 w-4 text-destructive" />
-                  )}
+                  Comprobar
                 </button>
-              </li>
-            );
-          })}
-        </ul>
+              )}
+            </form>
+            {answered && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Respuesta correcta:{" "}
+                <span className="font-medium text-foreground">{correctText}</span>
+              </p>
+            )}
+          </div>
+        ) : (
+          <ul className="mt-5 grid gap-2">
+            {shuffledOptions.map(({ n, text }) => {
+              const isThis = selected === n;
+              const isRight = n === current.correct_option;
+              let styles = "border-border bg-background";
+              if (answered) {
+                if (isRight) styles = "border-success bg-success/10 text-success-foreground";
+                else if (isThis) styles = "border-destructive bg-destructive/10";
+                else styles = "border-border bg-background opacity-60";
+              }
+              return (
+                <li key={n}>
+                  <button
+                    disabled={answered}
+                    onClick={() => answer(n)}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-sm transition-colors ${styles}`}
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs font-semibold">
+                      {String.fromCharCode(64 + shuffledOptions.findIndex((o) => o.n === n) + 1)}
+                    </span>
+                    <span className="flex-1">{text}</span>
+                    {answered && isRight && <Check className="h-4 w-4 text-success" />}
+                    {answered && isThis && !isRight && (
+                      <X className="h-4 w-4 text-destructive" />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
         {answered && (
           <div

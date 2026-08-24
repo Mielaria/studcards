@@ -1,8 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchAllRows } from "@/lib/fetch-all";
 import { AppShell } from "@/components/AppShell";
 import {
   ArrowLeft,
@@ -22,8 +21,7 @@ import { toast } from "sonner";
 import { exportSubjectBackup, downloadJson } from "@/lib/backup";
 import { EditCardModal } from "@/components/EditCardModal";
 import { CARD_BUCKET, removeImages } from "@/lib/card-images";
-import { countByState, fetchLastAnswers } from "@/lib/card-state";
-import { serverNow } from "@/lib/clock";
+import { fetchStateCounts } from "@/lib/card-state";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
 
 
@@ -58,24 +56,11 @@ function SubjectDetail() {
 
   const dayKeyNow = useOfficialDay();
 
+  // Contadores calculados en servidor (RPC get_card_state_counts) con
+  // fallback automático si la RPC aún no existe.
   const { data: counts } = useQuery({
     queryKey: ["subject-counts", id, dayKeyNow],
-    queryFn: async () => {
-      const cards = await fetchAllRows<{
-        id: string;
-        is_learned: boolean;
-        next_review_at: string;
-      }>((from, to) =>
-        supabase
-          .from("flashcards")
-          .select("id, is_learned, next_review_at")
-          .eq("subject_id", id)
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      );
-      const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
-      return countByState(cards, lastAnswers, serverNow());
-    },
+    queryFn: () => fetchStateCounts(id),
   });
 
   const updateSubject = useMutation({
@@ -356,30 +341,42 @@ function MiniStat({
   );
 }
 
+const CARD_PAGE = 50;
+
 function CardList({ subjectId }: { subjectId: string }) {
   const qc = useQueryClient();
   const [editingCard, setEditingCard] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
 
-  const { data: cards } = useQuery({
-    queryKey: ["subject-cards", subjectId],
-    queryFn: async () => {
-      return await fetchAllRows<{
-        id: string;
-        question: string;
-        is_learned: boolean;
-        learning_stage: number;
-        correct_answers_count: number;
-      }>((from, to) =>
-        supabase
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Búsqueda y paginación en servidor: nunca se descargan miles de filas.
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ["subject-cards", subjectId, debounced],
+      initialPageParam: 0,
+      queryFn: async ({ pageParam }) => {
+        const pattern = debounced.replace(/[%_\\]/g, "");
+        let q = supabase
           .from("flashcards")
           .select("id, question, is_learned, learning_stage, correct_answers_count")
           .eq("subject_id", subjectId)
           .order("created_at", { ascending: false })
-          .range(from, to),
-      );
-    },
-  });
+          .range(pageParam, pageParam + CARD_PAGE - 1);
+        if (pattern) q = q.ilike("question", `%${pattern}%`);
+        const { data, error } = await q;
+        if (error) throw error;
+        return data ?? [];
+      },
+      getNextPageParam: (last, pages) =>
+        last.length === CARD_PAGE ? pages.length * CARD_PAGE : undefined,
+    });
+
+  const cards = data?.pages.flat() ?? [];
 
   const delCard = useMutation({
     mutationFn: async (id: string) => {
@@ -399,13 +396,8 @@ function CardList({ subjectId }: { subjectId: string }) {
     },
   });
 
-  const query = search.trim().toLowerCase();
-  const filtered = (cards ?? []).filter((c) =>
-    query ? c.question.toLowerCase().includes(query) : true,
-  );
-
-  if (!cards) return null;
-  if (cards.length === 0)
+  if (!data) return null;
+  if (cards.length === 0 && !debounced)
     return (
       <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/60 p-6 text-center text-sm text-muted-foreground">
         Aún no tienes cartas en esta materia.
@@ -427,13 +419,13 @@ function CardList({ subjectId }: { subjectId: string }) {
           />
         </div>
       </div>
-      {filtered.length === 0 ? (
+      {cards.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-card/60 p-4 text-center text-sm text-muted-foreground">
-          Sin resultados para “{search}”.
+          Sin resultados para “{debounced}”.
         </p>
       ) : (
       <ul className="grid gap-2">
-        {filtered.map((c) => (
+        {cards.map((c) => (
           <li
             key={c.id}
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-sm"
@@ -466,6 +458,15 @@ function CardList({ subjectId }: { subjectId: string }) {
           </li>
         ))}
       </ul>
+      )}
+      {hasNextPage && (
+        <button
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="mt-3 w-full rounded-xl border border-border bg-card py-2.5 text-sm font-medium disabled:opacity-60"
+        >
+          {isFetchingNextPage ? "Cargando…" : "Cargar más"}
+        </button>
       )}
       {editingCard && (
         <EditCardModal
