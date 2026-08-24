@@ -234,6 +234,8 @@ function StudySession({
   const [queue, setQueue] = useState<Card[] | null>(null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  const [writtenInput, setWrittenInput] = useState("");
+  const [writtenResult, setWrittenResult] = useState<boolean | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [correct, setCorrect] = useState(0);
@@ -322,18 +324,23 @@ function StudySession({
     return shuffle(opts);
   }, [current?.id]);
 
-  async function revealAnswer() {
-    if (!current) return;
-    setShowExplanation(true);
-    if (selected !== null) return;
-    // Ver la respuesta cuenta como fallo: vuelve a Etapa 1 (mañana).
-    await answer(0);
-  }
+  // La modalidad (opción múltiple vs respuesta escrita) se sortea en CADA
+  // aparición de la carta y NUNCA se guarda en Supabase: la misma carta puede
+  // aparecer como opción múltiple una vez y como respuesta escrita otra.
+  const isWritten = useMemo(
+    () => Math.random() < WRITTEN_ANSWER_PROBABILITY,
+    [current?.id],
+  );
+  const correctText = current
+    ? [current.option_1, current.option_2, current.option_3, current.option_4][
+        current.correct_option - 1
+      ]
+    : "";
 
-  async function answer(optionN: number) {
-    if (!current || selected !== null) return;
-    setSelected(optionN);
-    const isCorrect = optionN === current.correct_option;
+  // Registra el resultado (acierto/fallo) con la MISMA lógica SRS para
+  // opción múltiple y respuesta escrita.
+  async function registerResult(isCorrect: boolean) {
+    if (!current) return;
     if (isCorrect) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
 
@@ -371,6 +378,30 @@ function StudySession({
         new_stage: update.new_stage,
       });
     }
+  }
+
+  async function answer(optionN: number) {
+    if (!current || selected !== null) return;
+    setSelected(optionN);
+    await registerResult(optionN === current.correct_option);
+  }
+
+  async function submitWritten() {
+    if (!current || writtenResult !== null) return;
+    if (!writtenInput.trim()) return;
+    const ok = answersMatch(writtenInput, correctText);
+    setWrittenResult(ok);
+    await registerResult(ok);
+  }
+
+  async function revealAnswer() {
+    if (!current) return;
+    setShowExplanation(true);
+    if (selected !== null || writtenResult !== null) return;
+    // Ver la respuesta cuenta como fallo: vuelve a Etapa 1 (mañana).
+    if (isWritten) setWrittenResult(false);
+    else setSelected(0);
+    await registerResult(false);
   }
 
   async function next() {
