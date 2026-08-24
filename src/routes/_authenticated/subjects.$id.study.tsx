@@ -428,6 +428,8 @@ function StudySession({
       return;
     }
     setSelected(null);
+    setWrittenInput("");
+    setWrittenResult(null);
     setShowExplanation(false);
     setIndex((i) => i + 1);
   }
@@ -458,8 +460,11 @@ function StudySession({
 
   if (!current) return null;
 
-  const answered = selected !== null;
-  const isCorrect = answered && selected === current.correct_option;
+  const answered = selected !== null || writtenResult !== null;
+  const isCorrect =
+    selected !== null
+      ? selected === current.correct_option
+      : writtenResult === true;
   const totalStudied = correct + incorrect;
   const finishing = answered && index + 1 >= queue.length;
 
