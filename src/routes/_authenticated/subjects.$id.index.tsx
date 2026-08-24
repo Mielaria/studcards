@@ -341,30 +341,42 @@ function MiniStat({
   );
 }
 
+const CARD_PAGE = 50;
+
 function CardList({ subjectId }: { subjectId: string }) {
   const qc = useQueryClient();
   const [editingCard, setEditingCard] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
 
-  const { data: cards } = useQuery({
-    queryKey: ["subject-cards", subjectId],
-    queryFn: async () => {
-      return await fetchAllRows<{
-        id: string;
-        question: string;
-        is_learned: boolean;
-        learning_stage: number;
-        correct_answers_count: number;
-      }>((from, to) =>
-        supabase
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Búsqueda y paginación en servidor: nunca se descargan miles de filas.
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ["subject-cards", subjectId, debounced],
+      initialPageParam: 0,
+      queryFn: async ({ pageParam }) => {
+        const pattern = debounced.replace(/[%_\\]/g, "");
+        let q = supabase
           .from("flashcards")
           .select("id, question, is_learned, learning_stage, correct_answers_count")
           .eq("subject_id", subjectId)
           .order("created_at", { ascending: false })
-          .range(from, to),
-      );
-    },
-  });
+          .range(pageParam, pageParam + CARD_PAGE - 1);
+        if (pattern) q = q.ilike("question", `%${pattern}%`);
+        const { data, error } = await q;
+        if (error) throw error;
+        return data ?? [];
+      },
+      getNextPageParam: (last, pages) =>
+        last.length === CARD_PAGE ? pages.length * CARD_PAGE : undefined,
+    });
+
+  const cards = data?.pages.flat() ?? [];
 
   const delCard = useMutation({
     mutationFn: async (id: string) => {
