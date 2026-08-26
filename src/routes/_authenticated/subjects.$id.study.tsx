@@ -11,6 +11,7 @@ import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
 import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
+import { readWrittenEnabled } from "@/lib/written-pref";
 import { serverNow, syncClock } from "@/lib/clock";
 import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle, PenLine } from "lucide-react";
 import { toast } from "sonner";
@@ -328,8 +329,10 @@ function StudySession({
   // aparición de la carta y NUNCA se guarda en Supabase: la misma carta puede
   // aparecer como opción múltiple una vez y como respuesta escrita otra.
   const isWritten = useMemo(
-    () => Math.random() < WRITTEN_ANSWER_PROBABILITY,
-    [current?.id],
+    () =>
+      readWrittenEnabled(subjectId) &&
+      Math.random() < WRITTEN_ANSWER_PROBABILITY,
+    [current?.id, subjectId],
   );
   const correctText = current
     ? [current.option_1, current.option_2, current.option_3, current.option_4][
