@@ -328,8 +328,10 @@ function StudySession({
   // aparición de la carta y NUNCA se guarda en Supabase: la misma carta puede
   // aparecer como opción múltiple una vez y como respuesta escrita otra.
   const isWritten = useMemo(
-    () => Math.random() < WRITTEN_ANSWER_PROBABILITY,
-    [current?.id],
+    () =>
+      readWrittenEnabled(subjectId) &&
+      Math.random() < WRITTEN_ANSWER_PROBABILITY,
+    [current?.id, subjectId],
   );
   const correctText = current
     ? [current.option_1, current.option_2, current.option_3, current.option_4][
