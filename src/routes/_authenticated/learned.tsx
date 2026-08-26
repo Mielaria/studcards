@@ -35,6 +35,9 @@ type Card = {
   subject_id: string;
 };
 
+const CARD_SELECT =
+  "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, subject_id";
+
 function LearnedPage() {
   const [session, setSession] = useState<Card[] | null>(null);
   const [requested, setRequested] = useState<number | "all">("all");
@@ -46,19 +49,19 @@ function LearnedPage() {
   const [elapsed, setElapsed] = useState(0);
   const qc = useQueryClient();
 
-  const { data: all } = useQuery({
-    queryKey: ["learned-cards"],
+  // Solo IDs: con miles de cartas aprendidas no se descarga el contenido.
+  const { data: ids } = useQuery({
+    queryKey: ["learned-card-ids"],
     queryFn: async () => {
-      return (await fetchAllRows<unknown>((from, to) =>
+      const rows = await fetchAllRows<{ id: string }>((from, to) =>
         supabase
           .from("flashcards")
-          .select(
-            "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, subject_id",
-          )
+          .select("id")
           .eq("is_learned", true)
           .order("created_at", { ascending: false })
           .range(from, to),
-      )) as Card[];
+      );
+      return rows.map((r) => r.id);
     },
   });
 
@@ -71,11 +74,22 @@ function LearnedPage() {
     return () => clearInterval(t);
   }, [session]);
 
-  function start() {
-    if (!all || all.length === 0) return;
-    const shuffled = shuffle(all);
-    const size = requested === "all" ? shuffled.length : Math.min(requested, shuffled.length);
-    setSession(shuffled.slice(0, size));
+  async function start() {
+    if (!ids || ids.length === 0) return;
+    const shuffled = shuffle(ids);
+    const size =
+      requested === "all" ? shuffled.length : Math.min(requested, shuffled.length);
+    const picked = shuffled.slice(0, size);
+    let cards: Card[];
+    try {
+      // Contenido completo SOLO de las cartas de esta sesión.
+      cards = await fetchCardsByIds<Card>(CARD_SELECT, picked);
+    } catch (e) {
+      return toast.error((e as Error).message);
+    }
+    const order = new Map(picked.map((id, i) => [id, i]));
+    cards.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    setSession(cards);
     setIndex(0);
     setSelected(null);
     setCorrect(0);
@@ -83,6 +97,7 @@ function LearnedPage() {
     startedAt.current = serverNow();
     setElapsed(0);
   }
+
 
   const current = session?.[index];
   const shuffledOptions = useMemo(() => {
