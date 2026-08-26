@@ -11,6 +11,7 @@ import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
 import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
+import { readWrittenEnabled } from "@/lib/written-pref";
 import { serverNow, syncClock } from "@/lib/clock";
 import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle, PenLine } from "lucide-react";
 import { toast } from "sonner";
