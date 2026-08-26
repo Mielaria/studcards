@@ -1,7 +1,7 @@
 // JSON export/import helpers. Import resets SRS progression to Stage 1.
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
-import { mapBatched } from "@/lib/batch";
+import { mapBatched, yieldToUi } from "@/lib/batch";
 import {
   CARD_BUCKET,
   downloadAsDataUrl,
