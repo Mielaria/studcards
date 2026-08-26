@@ -1,5 +1,7 @@
 // JSON export/import helpers. Import resets SRS progression to Stage 1.
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetch-all";
+import { mapBatched } from "@/lib/batch";
 import {
   CARD_BUCKET,
   downloadAsDataUrl,
@@ -9,14 +11,13 @@ import {
 
 /** Convierte rutas de Storage en base64 para que el JSON sea autocontenido. */
 async function embedImages(cards: BackupCard[]): Promise<BackupCard[]> {
-  return Promise.all(
-    cards.map(async (c) => {
-      if (!isStoragePath(c.image_url)) return c;
-      const dataUrl = await downloadAsDataUrl(CARD_BUCKET, c.image_url!);
-      return { ...c, image_url: dataUrl };
-    }),
-  );
+  return mapBatched(cards, async (c) => {
+    if (!isStoragePath(c.image_url)) return c;
+    const dataUrl = await downloadAsDataUrl(CARD_BUCKET, c.image_url!);
+    return { ...c, image_url: dataUrl };
+  });
 }
+
 
 export interface BackupCard {
   question: string;
