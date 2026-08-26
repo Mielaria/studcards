@@ -219,38 +219,40 @@ export async function importBackup(
         c.correct_option <= 4,
     );
     // Las imágenes en base64 del JSON se suben a Storage del usuario que importa.
-    const rows = await Promise.all(
-      valid.map(async (c) => {
-        let imageValue: string | null = c.image_url ?? null;
-        if (imageValue?.startsWith("data:")) {
-          try {
-            imageValue = await uploadDataUrl(CARD_BUCKET, imageValue);
-          } catch {
-            imageValue = null;
-          }
+    // Por lotes para no bloquear la interfaz con miles de cartas.
+    const rows = await mapBatched(valid, async (c) => {
+      let imageValue: string | null = c.image_url ?? null;
+      if (imageValue?.startsWith("data:")) {
+        try {
+          imageValue = await uploadDataUrl(CARD_BUCKET, imageValue);
+        } catch {
+          imageValue = null;
         }
-        return {
-          user_id: user.id,
-          subject_id: subjectId!,
-          question: c.question,
-          option_1: c.options[0],
-          option_2: c.options[1],
-          option_3: c.options[2],
-          option_4: c.options[3],
-          correct_option: c.correct_option,
-          explanation: c.explanation ?? null,
-          image_url: imageValue,
-          learning_stage: 1,
-          next_review_at: now,
-          correct_answers_count: 0,
-          is_learned: false,
-        };
-      }),
-    );
-    if (rows.length) {
-      const { error } = await supabase.from("flashcards").insert(rows);
+      }
+      return {
+        user_id: user.id,
+        subject_id: subjectId!,
+        question: c.question,
+        option_1: c.options[0],
+        option_2: c.options[1],
+        option_3: c.options[2],
+        option_4: c.options[3],
+        correct_option: c.correct_option,
+        explanation: c.explanation ?? null,
+        image_url: imageValue,
+        learning_stage: 1,
+        next_review_at: now,
+        correct_answers_count: 0,
+        is_learned: false,
+      };
+    });
+    // Inserción por lotes de 500 filas.
+    for (let i = 0; i < rows.length; i += 500) {
+      const chunk = rows.slice(i, i + 500);
+      const { error } = await supabase.from("flashcards").insert(chunk);
       if (error) throw error;
-      cardsCreated += rows.length;
+      cardsCreated += chunk.length;
+      await yieldToUi();
     }
   }
   return { subjectsCreated, cardsCreated };
