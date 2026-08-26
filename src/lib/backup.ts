@@ -38,40 +38,59 @@ export interface BackupFile {
   subjects: BackupSubject[];
 }
 
+type ExportRow = {
+  subject_id?: string;
+  question: string;
+  option_1: string;
+  option_2: string;
+  option_3: string;
+  option_4: string;
+  correct_option: number;
+  explanation: string | null;
+  image_url: string | null;
+};
+
+function toBackupCard(c: ExportRow): BackupCard {
+  return {
+    question: c.question,
+    options: [c.option_1, c.option_2, c.option_3, c.option_4] as [
+      string,
+      string,
+      string,
+      string,
+    ],
+    correct_option: c.correct_option as 1 | 2 | 3 | 4,
+    explanation: c.explanation ?? null,
+    image_url: c.image_url,
+  };
+}
+
 export async function exportBackup(): Promise<BackupFile> {
   const { data: subjects, error: sErr } = await supabase
     .from("subjects")
     .select("id, name, icon")
     .order("created_at");
   if (sErr) throw sErr;
-  const { data: cards, error: cErr } = await supabase
-    .from("flashcards")
-    .select(
-      "subject_id, question, option_1, option_2, option_3, option_4, correct_option, explanation, image_url",
-    );
-  if (cErr) throw cErr;
-  const grouped: BackupSubject[] = await Promise.all(
-    (subjects ?? []).map(async (s) => ({
+  // Paginado: PostgREST corta en 1000 filas por petición.
+  const cards = await fetchAllRows<ExportRow>((from, to) =>
+    supabase
+      .from("flashcards")
+      .select(
+        "subject_id, question, option_1, option_2, option_3, option_4, correct_option, explanation, image_url",
+      )
+      .order("created_at")
+      .range(from, to),
+  );
+  const grouped: BackupSubject[] = [];
+  for (const s of subjects ?? []) {
+    grouped.push({
       name: s.name,
       icon: s.icon,
       cards: await embedImages(
-        (cards ?? [])
-          .filter((c) => c.subject_id === s.id)
-          .map((c) => ({
-            question: c.question,
-            options: [c.option_1, c.option_2, c.option_3, c.option_4] as [
-              string,
-              string,
-              string,
-              string,
-            ],
-            correct_option: c.correct_option as 1 | 2 | 3 | 4,
-            explanation: c.explanation ?? null,
-            image_url: c.image_url,
-          })),
+        cards.filter((c) => c.subject_id === s.id).map(toBackupCard),
       ),
-    })),
-  );
+    });
+  }
   return {
     app: "studcards",
     version: 1,
@@ -89,28 +108,17 @@ export async function exportSubjectBackup(
     .eq("id", subjectId)
     .single();
   if (sErr) throw sErr;
-  const { data: cards, error: cErr } = await supabase
-    .from("flashcards")
-    .select(
-      "question, option_1, option_2, option_3, option_4, correct_option, explanation, image_url",
-    )
-    .eq("subject_id", subjectId)
-    .order("created_at");
-  if (cErr) throw cErr;
-  const exportedCards = await embedImages(
-    (cards ?? []).map((c) => ({
-      question: c.question,
-      options: [c.option_1, c.option_2, c.option_3, c.option_4] as [
-        string,
-        string,
-        string,
-        string,
-      ],
-      correct_option: c.correct_option as 1 | 2 | 3 | 4,
-      explanation: c.explanation ?? null,
-      image_url: c.image_url,
-    })),
+  const cards = await fetchAllRows<ExportRow>((from, to) =>
+    supabase
+      .from("flashcards")
+      .select(
+        "question, option_1, option_2, option_3, option_4, correct_option, explanation, image_url",
+      )
+      .eq("subject_id", subjectId)
+      .order("created_at")
+      .range(from, to),
   );
+  const exportedCards = await embedImages(cards.map(toBackupCard));
   return {
     app: "studcards",
     version: 1,
@@ -133,15 +141,16 @@ export async function listSubjects(): Promise<
     .select("id, name")
     .order("created_at");
   if (error) throw error;
-  const { data: cards } = await supabase
-    .from("flashcards")
-    .select("subject_id");
+  const cards = await fetchAllRows<{ subject_id: string }>((from, to) =>
+    supabase.from("flashcards").select("subject_id").range(from, to),
+  );
   return (subjects ?? []).map((s) => ({
     id: s.id,
     name: s.name,
-    count: (cards ?? []).filter((c) => c.subject_id === s.id).length,
+    count: cards.filter((c) => c.subject_id === s.id).length,
   }));
 }
+
 
 export function slugify(name: string) {
   return name
