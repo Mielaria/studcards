@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
+import { fetchCardsByIds } from "@/lib/card-fetch";
 import { AppShell } from "@/components/AppShell";
 import { ExplanationModal } from "@/components/ExplanationModal";
 import { CardImage } from "@/components/CardImage";
@@ -32,6 +33,9 @@ type Card = {
   explanation: string | null;
   subject_id: string;
 };
+
+const CARD_SELECT =
+  "id, question, option_1, option_2, option_3, option_4, correct_option, image_url, explanation, subject_id";
 
 function PracticePage() {
   const [scope, setScope] = useState<string>("all");
