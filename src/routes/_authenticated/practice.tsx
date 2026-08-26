@@ -63,22 +63,32 @@ function PracticePage() {
   }, [session]);
 
   async function start() {
-    let rows: unknown[];
+    let ids: string[];
     try {
-      rows = await fetchAllRows<unknown>((from, to) => {
-        let q = supabase
-          .from("flashcards")
-          .select("id, question, option_1, option_2, option_3, option_4, correct_option, image_url, explanation, subject_id");
+      // 1) Solo IDs: no se descarga el contenido de miles de cartas.
+      const rows = await fetchAllRows<{ id: string }>((from, to) => {
+        let q = supabase.from("flashcards").select("id");
         if (scope !== "all") q = q.eq("subject_id", scope);
         return q.order("created_at", { ascending: false }).range(from, to);
       });
+      ids = rows.map((r) => r.id);
     } catch (e) {
       return toast.error((e as Error).message);
     }
-    const pool = shuffle(rows as Card[]);
-    if (pool.length === 0) return toast.error("No hay cartas para repasar");
+    if (ids.length === 0) return toast.error("No hay cartas para repasar");
+    const pool = shuffle(ids);
     const size = count === "all" ? pool.length : Math.min(count, pool.length);
-    setSession(pool.slice(0, size));
+    const picked = pool.slice(0, size);
+    let cards: Card[];
+    try {
+      // 2) Contenido completo SOLO de las cartas de esta sesión.
+      cards = await fetchCardsByIds<Card>(CARD_SELECT, picked);
+    } catch (e) {
+      return toast.error((e as Error).message);
+    }
+    const order = new Map(picked.map((id, i) => [id, i]));
+    cards.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    setSession(cards);
     setIndex(0);
     setSelected(null);
     setShowExplanation(false);
@@ -87,6 +97,7 @@ function PracticePage() {
     startedAt.current = new Date();
     setElapsed(0);
   }
+
 
   const current = session?.[index];
   const opts = useMemo(() => {
