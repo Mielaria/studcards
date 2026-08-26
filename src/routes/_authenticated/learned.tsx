@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
+import { fetchCardsByIds } from "@/lib/card-fetch";
 import { AppShell } from "@/components/AppShell";
 import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
@@ -141,7 +142,7 @@ function LearnedPage() {
         new_stage: upd.new_stage,
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["learned-cards"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["learned-card-ids"] }),
   });
 
   async function answer(n: number) {
@@ -249,7 +250,7 @@ function LearnedPage() {
     );
   }
 
-  const total = all?.length ?? 0;
+  const total = ids?.length ?? 0;
   return (
     <AppShell>
       <header className="mb-6">
