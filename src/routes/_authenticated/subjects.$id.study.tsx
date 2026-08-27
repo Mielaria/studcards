@@ -12,8 +12,14 @@ import { fetchLastAnswers } from "@/lib/card-state";
 import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
 import { readWrittenEnabled } from "@/lib/written-pref";
+import { readAudioOnly } from "@/lib/audio-pref";
+import {
+  createEnglishRecognition,
+  isSpeechRecognitionSupported,
+  speakEnglish,
+} from "@/lib/speech";
 import { serverNow, syncClock } from "@/lib/clock";
-import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle, PenLine } from "lucide-react";
+import { ArrowLeft, Check, X, Clock, Lightbulb, AlertTriangle, PenLine, Mic, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 type StudyMode = "all" | "failed";
@@ -328,11 +334,13 @@ function StudySession({
   // La modalidad (opción múltiple vs respuesta escrita) se sortea en CADA
   // aparición de la carta y NUNCA se guarda en Supabase: la misma carta puede
   // aparecer como opción múltiple una vez y como respuesta escrita otra.
+  const audioOnly = useMemo(() => readAudioOnly(subjectId), [subjectId]);
   const isWritten = useMemo(
     () =>
+      !audioOnly &&
       readWrittenEnabled(subjectId) &&
       Math.random() < WRITTEN_ANSWER_PROBABILITY,
-    [current?.id, subjectId],
+    [current?.id, subjectId, audioOnly],
   );
   const correctText = current
     ? [current.option_1, current.option_2, current.option_3, current.option_4][
@@ -520,7 +528,22 @@ function StudySession({
           {current.question}
         </h2>
 
-        {isWritten ? (
+        {audioOnly ? (
+          <VoiceAnswer
+            key={current.id}
+            answered={answered}
+            isCorrect={isCorrect}
+            correctText={correctText}
+            onResult={(text) => {
+              if (writtenResult !== null) return;
+              setWrittenInput(text);
+              const ok = answersMatch(text, correctText);
+              setWrittenResult(ok);
+              registerResult(ok);
+            }}
+            transcript={writtenInput}
+          />
+        ) : isWritten ? (
           <div className="mt-5">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <PenLine className="h-3.5 w-3.5" /> Respuesta escrita — escribe la
@@ -657,6 +680,119 @@ function StudySession({
         <span>✗ {incorrect}</span>
       </div>
     </AppShell>
+  );
+}
+
+function VoiceAnswer({
+  answered,
+  isCorrect,
+  correctText,
+  transcript,
+  onResult,
+}: {
+  answered: boolean;
+  isCorrect: boolean;
+  correctText: string;
+  transcript: string;
+  onResult: (text: string) => void;
+}) {
+  const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const recRef = useRef<ReturnType<typeof createEnglishRecognition>>(null);
+  const supported = isSpeechRecognitionSupported();
+
+  useEffect(() => () => recRef.current?.abort(), []);
+
+  function start() {
+    if (answered || listening) return;
+    const rec = createEnglishRecognition();
+    if (!rec) {
+      toast.error("Tu navegador no permite reconocimiento de voz.");
+      return;
+    }
+    recRef.current = rec;
+    setInterim("");
+    rec.onresult = (event: any) => {
+      let text = "";
+      let isFinal = false;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        text += result[0].transcript;
+        if (result.isFinal) isFinal = true;
+      }
+      setInterim(text);
+      if (isFinal) {
+        // Acepta cualquiera de las alternativas reconocidas si coincide.
+        const last = event.results[event.results.length - 1];
+        let best = text;
+        for (let a = 0; a < last.length; a++) {
+          if (answersMatch(last[a].transcript, correctText)) {
+            best = last[a].transcript;
+            break;
+          }
+        }
+        rec.stop();
+        setListening(false);
+        onResult(best.trim());
+      }
+    };
+    rec.onerror = () => {
+      setListening(false);
+      toast.error("No se pudo escuchar. Revisa el permiso del micrófono.");
+    };
+    rec.onend = () => setListening(false);
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 flex flex-col items-center gap-3">
+      {!answered && (
+        <>
+          <button
+            type="button"
+            onClick={start}
+            disabled={!supported}
+            aria-label="Hablar la respuesta en inglés"
+            className={`flex h-20 w-20 items-center justify-center rounded-full text-primary-foreground shadow-elevated transition-transform disabled:opacity-50 ${
+              listening ? "animate-pulse bg-destructive" : "bg-primary hover:scale-105"
+            }`}
+          >
+            <Mic className="h-8 w-8" />
+          </button>
+          <p className="text-xs text-muted-foreground">
+            {!supported
+              ? "Tu navegador no permite reconocimiento de voz."
+              : listening
+                ? "Escuchando… di la respuesta en inglés"
+                : "Toca el micrófono y di la respuesta en inglés"}
+          </p>
+          {interim && <p className="text-sm font-medium">{interim}</p>}
+        </>
+      )}
+      {answered && (
+        <div className="w-full text-center">
+          <p
+            className={`text-base font-semibold ${
+              isCorrect ? "text-success" : "text-destructive"
+            }`}
+          >
+            “{transcript || "—"}”
+          </p>
+          <button
+            type="button"
+            onClick={() => speakEnglish(correctText)}
+            className="mt-3 inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm"
+          >
+            <Volume2 className="h-4 w-4" /> Escuchar: {correctText}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
