@@ -346,7 +346,9 @@ function MiniStat({
 
 function WrittenToggle({ subjectId }: { subjectId: string }) {
   const { enabled, toggle } = useWrittenEnabled(subjectId);
+  const audio = useAudioOnly(subjectId);
   return (
+    <>
     <section className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-card">
       <div className="min-w-0">
         <h3 className="font-display text-base font-semibold">Respuesta escrita</h3>
