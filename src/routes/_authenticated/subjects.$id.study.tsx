@@ -410,7 +410,7 @@ function StudySession({
     setShowExplanation(true);
     if (selected !== null || writtenResult !== null) return;
     // Ver la respuesta cuenta como fallo: vuelve a Etapa 1 (mañana).
-    if (isWritten) setWrittenResult(false);
+    if (isWritten || audioOnly) setWrittenResult(false);
     else setSelected(0);
     await registerResult(false);
   }
