@@ -24,6 +24,7 @@ import { CARD_BUCKET, removeImages } from "@/lib/card-images";
 import { fetchStateCounts } from "@/lib/card-state";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
 import { useWrittenEnabled } from "@/lib/written-pref";
+import { useAudioOnly } from "@/lib/audio-pref";
 
 
 export const Route = createFileRoute("/_authenticated/subjects/$id/")({
