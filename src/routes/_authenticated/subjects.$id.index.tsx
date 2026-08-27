@@ -344,6 +344,37 @@ function MiniStat({
   );
 }
 
+function WrittenToggle({ subjectId }: { subjectId: string }) {
+  const { enabled, toggle } = useWrittenEnabled(subjectId);
+  return (
+    <section className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="min-w-0">
+        <h3 className="font-display text-base font-semibold">Respuesta escrita</h3>
+        <p className="text-xs text-muted-foreground">
+          {enabled
+            ? "Algunas preguntas pedirán escribir la respuesta (aleatorio)."
+            : "Todas las preguntas serán de opción múltiple."}
+        </p>
+      </div>
+      <button
+        onClick={toggle}
+        role="switch"
+        aria-checked={enabled}
+        aria-label="Activar respuesta escrita"
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+          enabled ? "bg-primary" : "bg-muted"
+        }`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-background transition-all ${
+            enabled ? "left-6" : "left-1"
+          }`}
+        />
+      </button>
+    </section>
+  );
+}
+
 const CARD_PAGE = 50;
 
 function CardList({ subjectId }: { subjectId: string }) {
@@ -352,10 +383,6 @@ function CardList({ subjectId }: { subjectId: string }) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(search.trim()), 300);
-    return () => clearTimeout(t);
-  }, [search]);
 
   // Búsqueda y paginación en servidor: nunca se descargan miles de filas.
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -411,16 +438,42 @@ function CardList({ subjectId }: { subjectId: string }) {
     <section className="mt-8">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">Cartas</h2>
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar carta por nombre…"
-            aria-label="Buscar carta"
-            className="w-full rounded-xl border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
-          />
-        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setDebounced(search.trim());
+          }}
+          className="flex w-full gap-2 sm:w-auto"
+        >
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar carta por nombre…"
+              aria-label="Buscar carta"
+              className="w-full rounded-xl border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Buscar
+          </button>
+          {debounced && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setDebounced("");
+              }}
+              className="rounded-xl border border-border px-4 py-2 text-sm"
+            >
+              Limpiar
+            </button>
+          )}
+        </form>
       </div>
       {cards.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-card/60 p-4 text-center text-sm text-muted-foreground">
