@@ -23,6 +23,7 @@ import { EditCardModal } from "@/components/EditCardModal";
 import { CARD_BUCKET, removeImages } from "@/lib/card-images";
 import { fetchStateCounts } from "@/lib/card-state";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
+import { useWrittenEnabled } from "@/lib/written-pref";
 
 
 export const Route = createFileRoute("/_authenticated/subjects/$id/")({
@@ -290,6 +291,8 @@ function SubjectDetail() {
           <Plus className="h-6 w-6 text-primary" />
         </Link>
       </section>
+
+      <WrittenToggle subjectId={id} />
 
       <CardList subjectId={id} />
     </AppShell>
