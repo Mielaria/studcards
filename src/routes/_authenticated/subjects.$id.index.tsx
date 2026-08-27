@@ -374,6 +374,32 @@ function WrittenToggle({ subjectId }: { subjectId: string }) {
         />
       </button>
     </section>
+    <section className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="min-w-0">
+        <h3 className="font-display text-base font-semibold">Usar únicamente audio</h3>
+        <p className="text-xs text-muted-foreground">
+          {audio.enabled
+            ? "Todas las preguntas se responden hablando en inglés por micrófono."
+            : "Desactivado: se usa opción múltiple / respuesta escrita."}
+        </p>
+      </div>
+      <button
+        onClick={audio.toggle}
+        role="switch"
+        aria-checked={audio.enabled}
+        aria-label="Usar únicamente audio"
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+          audio.enabled ? "bg-primary" : "bg-muted"
+        }`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-background transition-all ${
+            audio.enabled ? "left-6" : "left-1"
+          }`}
+        />
+      </button>
+    </section>
+    </>
   );
 }
 
