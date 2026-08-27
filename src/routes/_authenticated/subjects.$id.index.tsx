@@ -24,6 +24,7 @@ import { CARD_BUCKET, removeImages } from "@/lib/card-images";
 import { fetchStateCounts } from "@/lib/card-state";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
 import { useWrittenEnabled } from "@/lib/written-pref";
+import { useAudioOnly } from "@/lib/audio-pref";
 
 
 export const Route = createFileRoute("/_authenticated/subjects/$id/")({
@@ -346,7 +347,9 @@ function MiniStat({
 
 function WrittenToggle({ subjectId }: { subjectId: string }) {
   const { enabled, toggle } = useWrittenEnabled(subjectId);
+  const audio = useAudioOnly(subjectId);
   return (
+    <>
     <section className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-card">
       <div className="min-w-0">
         <h3 className="font-display text-base font-semibold">Respuesta escrita</h3>
@@ -372,6 +375,32 @@ function WrittenToggle({ subjectId }: { subjectId: string }) {
         />
       </button>
     </section>
+    <section className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="min-w-0">
+        <h3 className="font-display text-base font-semibold">Usar únicamente audio</h3>
+        <p className="text-xs text-muted-foreground">
+          {audio.enabled
+            ? "Todas las preguntas se responden hablando en inglés por micrófono."
+            : "Desactivado: se usa opción múltiple / respuesta escrita."}
+        </p>
+      </div>
+      <button
+        onClick={audio.toggle}
+        role="switch"
+        aria-checked={audio.enabled}
+        aria-label="Usar únicamente audio"
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+          audio.enabled ? "bg-primary" : "bg-muted"
+        }`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-background transition-all ${
+            audio.enabled ? "left-6" : "left-1"
+          }`}
+        />
+      </button>
+    </section>
+    </>
   );
 }
 
