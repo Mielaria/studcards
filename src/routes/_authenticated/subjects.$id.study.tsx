@@ -697,7 +697,8 @@ function VoiceAnswer({
   onResult: (text: string) => void;
 }) {
   const [listening, setListening] = useState(false);
-  const [interim, setInterim] = useState("");
+  const [draft, setDraft] = useState("");
+  const [typing, setTyping] = useState(false);
   const recRef = useRef<ReturnType<typeof createEnglishRecognition>>(null);
   const supported = isSpeechRecognitionSupported();
 
@@ -708,10 +709,10 @@ function VoiceAnswer({
     const rec = createEnglishRecognition();
     if (!rec) {
       toast.error("Tu navegador no permite reconocimiento de voz.");
+      setTyping(true);
       return;
     }
     recRef.current = rec;
-    setInterim("");
     rec.onresult = (event: any) => {
       let text = "";
       let isFinal = false;
@@ -720,7 +721,7 @@ function VoiceAnswer({
         text += result[0].transcript;
         if (result.isFinal) isFinal = true;
       }
-      setInterim(text);
+      setDraft(text.trim());
       if (isFinal) {
         // Acepta cualquiera de las alternativas reconocidas si coincide.
         const last = event.results[event.results.length - 1];
@@ -733,12 +734,13 @@ function VoiceAnswer({
         }
         rec.stop();
         setListening(false);
-        onResult(best.trim());
+        // No se envía automáticamente: se deja para revisar y corregir.
+        setDraft(best.trim());
       }
     };
     rec.onerror = () => {
       setListening(false);
-      toast.error("No se pudo escuchar. Revisa el permiso del micrófono.");
+      toast.error("No se pudo escuchar. Escribe la respuesta si falla el micrófono.");
     };
     rec.onend = () => setListening(false);
     try {
@@ -746,6 +748,7 @@ function VoiceAnswer({
       setListening(true);
     } catch {
       setListening(false);
+      toast.error("No se pudo iniciar el micrófono.");
     }
   }
 
@@ -753,25 +756,65 @@ function VoiceAnswer({
     <div className="mt-6 flex flex-col items-center gap-3">
       {!answered && (
         <>
+          {!typing && (
+            <>
+              <button
+                type="button"
+                onClick={start}
+                disabled={!supported}
+                aria-label="Hablar la respuesta en inglés"
+                className={`flex h-20 w-20 items-center justify-center rounded-full text-primary-foreground shadow-elevated transition-transform disabled:opacity-50 ${
+                  listening ? "animate-pulse bg-destructive" : "bg-primary hover:scale-105"
+                }`}
+              >
+                <Mic className="h-8 w-8" />
+              </button>
+              <p className="text-xs text-muted-foreground">
+                {!supported
+                  ? "Tu navegador no permite reconocimiento de voz."
+                  : listening
+                    ? "Escuchando… di la respuesta en inglés"
+                    : "Toca el micrófono y di la respuesta en inglés"}
+              </p>
+            </>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (draft.trim()) onResult(draft.trim());
+            }}
+            className="mt-1 flex w-full max-w-md gap-2"
+          >
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={typing ? "Escribe tu respuesta…" : "La palabra que se escuchó…"}
+              aria-label="Tu respuesta"
+              autoFocus={typing}
+              className="min-w-0 flex-1 rounded-xl border border-input bg-background px-3.5 py-3 text-sm outline-none focus:border-primary"
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim()}
+              className="rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              Enviar
+            </button>
+          </form>
+
           <button
             type="button"
-            onClick={start}
-            disabled={!supported}
-            aria-label="Hablar la respuesta en inglés"
-            className={`flex h-20 w-20 items-center justify-center rounded-full text-primary-foreground shadow-elevated transition-transform disabled:opacity-50 ${
-              listening ? "animate-pulse bg-destructive" : "bg-primary hover:scale-105"
-            }`}
+            onClick={() => {
+              recRef.current?.abort();
+              setListening(false);
+              setTyping((t) => !t);
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs text-muted-foreground"
           >
-            <Mic className="h-8 w-8" />
+            <PenLine className="h-3.5 w-3.5" />
+            {typing ? "Volver al micrófono" : "El micrófono falla: escribir la palabra"}
           </button>
-          <p className="text-xs text-muted-foreground">
-            {!supported
-              ? "Tu navegador no permite reconocimiento de voz."
-              : listening
-                ? "Escuchando… di la respuesta en inglés"
-                : "Toca el micrófono y di la respuesta en inglés"}
-          </p>
-          {interim && <p className="text-sm font-medium">{interim}</p>}
         </>
       )}
       {answered && (
@@ -795,6 +838,7 @@ function VoiceAnswer({
     </div>
   );
 }
+
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60);
