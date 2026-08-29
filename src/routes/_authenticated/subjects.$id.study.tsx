@@ -13,6 +13,7 @@ import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
 import { readWrittenEnabled } from "@/lib/written-pref";
 import { readAudioOnly } from "@/lib/audio-pref";
+import { playAnswerSound } from "@/lib/sfx";
 import {
   createEnglishRecognition,
   isSpeechRecognitionSupported,
