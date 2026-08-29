@@ -800,7 +800,7 @@ function VoiceAnswer({
                 {!supported
                   ? "Tu navegador no permite reconocimiento de voz."
                   : listening
-                    ? "Escuchando… di la respuesta en inglés"
+                    ? "Escuchando… di la palabra y toca el micrófono para parar"
                     : "Toca el micrófono y di la respuesta en inglés"}
               </p>
             </>
