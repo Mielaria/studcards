@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
 import { serverNow } from "@/lib/clock";
+import { playAnswerSound } from "@/lib/sfx";
 import { Check, X, Clock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
