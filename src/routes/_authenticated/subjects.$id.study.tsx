@@ -352,6 +352,7 @@ function StudySession({
   // opción múltiple y respuesta escrita.
   async function registerResult(isCorrect: boolean) {
     if (!current) return;
+    playAnswerSound(isCorrect);
     if (isCorrect) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
 
