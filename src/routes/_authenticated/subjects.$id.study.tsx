@@ -702,9 +702,24 @@ function VoiceAnswer({
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const recRef = useRef<ReturnType<typeof createEnglishRecognition>>(null);
+  // Cuando el usuario quiere seguir escuchando, se reinicia el reconocedor
+  // automáticamente: las palabras cortas suelen cortar la sesión enseguida.
+  const wantListenRef = useRef(false);
   const supported = isSpeechRecognitionSupported();
 
-  useEffect(() => () => recRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      wantListenRef.current = false;
+      recRef.current?.abort();
+    },
+    [],
+  );
+
+  function stop() {
+    wantListenRef.current = false;
+    recRef.current?.stop();
+    setListening(false);
+  }
 
   function start() {
     if (answered || listening) return;
@@ -715,40 +730,50 @@ function VoiceAnswer({
       return;
     }
     recRef.current = rec;
+    wantListenRef.current = true;
     rec.onresult = (event: any) => {
       let text = "";
-      let isFinal = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        text += result[0].transcript;
-        if (result.isFinal) isFinal = true;
+        text += event.results[i][0].transcript;
       }
-      setDraft(text.trim());
-      if (isFinal) {
-        // Acepta cualquiera de las alternativas reconocidas si coincide.
-        const last = event.results[event.results.length - 1];
-        let best = text;
-        for (let a = 0; a < last.length; a++) {
-          if (answersMatch(last[a].transcript, correctText)) {
-            best = last[a].transcript;
-            break;
-          }
+      // Acepta cualquiera de las alternativas reconocidas si coincide.
+      const last = event.results[event.results.length - 1];
+      let best = text;
+      for (let a = 0; a < last.length; a++) {
+        if (answersMatch(last[a].transcript, correctText)) {
+          best = last[a].transcript;
+          break;
         }
-        rec.stop();
+      }
+      // No se envía automáticamente: se deja para revisar y corregir.
+      if (best.trim()) setDraft(best.trim());
+    };
+    rec.onerror = (event: any) => {
+      // "no-speech"/"aborted" son cortes normales con palabras muy cortas:
+      // no se avisa al usuario, el onend reinicia la escucha.
+      const code = event?.error;
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        wantListenRef.current = false;
         setListening(false);
-        // No se envía automáticamente: se deja para revisar y corregir.
-        setDraft(best.trim());
+        toast.error("No se pudo escuchar. Escribe la respuesta si falla el micrófono.");
       }
     };
-    rec.onerror = () => {
-      setListening(false);
-      toast.error("No se pudo escuchar. Escribe la respuesta si falla el micrófono.");
+    rec.onend = () => {
+      if (!wantListenRef.current || answered) {
+        setListening(false);
+        return;
+      }
+      try {
+        rec.start();
+      } catch {
+        setListening(false);
+      }
     };
-    rec.onend = () => setListening(false);
     try {
       rec.start();
       setListening(true);
     } catch {
+      wantListenRef.current = false;
       setListening(false);
       toast.error("No se pudo iniciar el micrófono.");
     }
@@ -762,9 +787,9 @@ function VoiceAnswer({
             <>
               <button
                 type="button"
-                onClick={start}
+                onClick={listening ? stop : start}
                 disabled={!supported}
-                aria-label="Hablar la respuesta en inglés"
+                aria-label={listening ? "Dejar de escuchar" : "Hablar la respuesta en inglés"}
                 className={`flex h-20 w-20 items-center justify-center rounded-full text-primary-foreground shadow-elevated transition-transform disabled:opacity-50 ${
                   listening ? "animate-pulse bg-destructive" : "bg-primary hover:scale-105"
                 }`}
@@ -775,7 +800,7 @@ function VoiceAnswer({
                 {!supported
                   ? "Tu navegador no permite reconocimiento de voz."
                   : listening
-                    ? "Escuchando… di la respuesta en inglés"
+                    ? "Escuchando… di la palabra y toca el micrófono para parar"
                     : "Toca el micrófono y di la respuesta en inglés"}
               </p>
             </>

@@ -31,8 +31,10 @@ export function createEnglishRecognition(): SpeechRecognitionLike | null {
   const rec = new Ctor();
   rec.lang = "en-US";
   rec.interimResults = true;
-  rec.continuous = false;
-  rec.maxAlternatives = 5;
+  // Modo continuo: palabras muy cortas ("key", "view") no cierran la sesión
+  // de escucha, así el navegador sigue capturando hasta que el usuario pare.
+  rec.continuous = true;
+  rec.maxAlternatives = 10;
   return rec;
 }
 
