@@ -787,9 +787,9 @@ function VoiceAnswer({
             <>
               <button
                 type="button"
-                onClick={start}
+                onClick={listening ? stop : start}
                 disabled={!supported}
-                aria-label="Hablar la respuesta en inglés"
+                aria-label={listening ? "Dejar de escuchar" : "Hablar la respuesta en inglés"}
                 className={`flex h-20 w-20 items-center justify-center rounded-full text-primary-foreground shadow-elevated transition-transform disabled:opacity-50 ${
                   listening ? "animate-pulse bg-destructive" : "bg-primary hover:scale-105"
                 }`}
