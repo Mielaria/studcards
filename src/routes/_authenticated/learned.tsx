@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { CardImage } from "@/components/CardImage";
 import { applyAnswer, shuffle, type Stage } from "@/lib/srs";
 import { serverNow } from "@/lib/clock";
+import { playAnswerSound } from "@/lib/sfx";
 import { Check, X, Clock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -149,6 +150,7 @@ function LearnedPage() {
     if (!current || selected !== null) return;
     setSelected(n);
     const isCorrect = n === current.correct_option;
+    playAnswerSound(isCorrect);
     if (isCorrect) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
     update.mutate({ card: current, isCorrect });

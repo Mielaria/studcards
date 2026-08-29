@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { ExplanationModal } from "@/components/ExplanationModal";
 import { CardImage } from "@/components/CardImage";
 import { shuffle } from "@/lib/srs";
+import { playAnswerSound } from "@/lib/sfx";
 import { Check, X, Clock, Zap, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 
@@ -117,7 +118,9 @@ function PracticePage() {
   function answer(n: number) {
     if (!current || selected !== null) return;
     setSelected(n);
-    if (n === current.correct_option) setCorrect((c) => c + 1);
+    const ok = n === current.correct_option;
+    playAnswerSound(ok);
+    if (ok) setCorrect((c) => c + 1);
     else setIncorrect((c) => c + 1);
   }
 
