@@ -193,6 +193,7 @@ function LearnedPage() {
               value={current.image_url}
               alt=""
               className="mb-4 max-h-72 w-full rounded-2xl bg-muted object-contain"
+            expandable
             />
           )}
           <h2 className="font-display text-xl font-semibold leading-snug md:text-2xl">
