@@ -442,7 +442,9 @@ function StudySession({
           })
           .eq("id", sessionId);
       }
-      await qc.invalidateQueries();
+      // refetchType "all" refresca también las consultas que no están montadas
+      // (contadores del inicio y de la materia) para que se vean actualizadas.
+      await qc.invalidateQueries({ refetchType: "all" });
       onFinish();
       return;
     }
