@@ -52,15 +52,16 @@ type Card = {
 export const CARD_SELECT =
   "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, explanation, next_review_at";
 
-function StudyPage() {
-  const { id: subjectId } = Route.useParams();
-  const { mode } = Route.useSearch();
-  const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
-  const [requestedCount, setRequestedCount] = useState<number | "all">("all");
-  const [available, setAvailable] = useState<QueueBreakdown | null>(null);
-
-  useEffect(() => {
-    (async () => {
+/**
+ * Metadatos ligeros + últimas respuestas de la materia. Se cachean en React
+ * Query para que la pantalla de configuración y la sesión NO repitan la misma
+ * descarga (antes se hacía dos veces, de ahí la espera larga al empezar).
+ */
+function usePool(subjectId: string) {
+  return useQuery({
+    queryKey: ["study-pool", subjectId],
+    staleTime: 60_000,
+    queryFn: async () => {
       await syncClock();
       const cards = await fetchAllRows<{
         id: string;
@@ -75,20 +76,33 @@ function StudyPage() {
           .range(from, to),
       );
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
-      const res = buildDailyQueue({
-        cards,
-        lastAnswers,
-        now: serverNow(),
-        limit: "all",
-        only: mode === "failed" ? "failed" : undefined,
-      });
-      setAvailable(res.available);
-    })();
-  }, [subjectId, mode]);
+      return { cards, lastAnswers };
+    },
+  });
+}
+
+function StudyPage() {
+  const { id: subjectId } = Route.useParams();
+  const { mode } = Route.useSearch();
+  const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
+  const [requestedCount, setRequestedCount] = useState<number | "all">("all");
+  const { data: pool } = usePool(subjectId);
+
+  const available = useMemo<QueueBreakdown | null>(() => {
+    if (!pool) return null;
+    return buildDailyQueue({
+      cards: pool.cards,
+      lastAnswers: pool.lastAnswers,
+      now: serverNow(),
+      limit: "all",
+      only: mode === "failed" ? "failed" : undefined,
+    }).available;
+  }, [pool, mode]);
 
   const totalAvailable = available
     ? available.failed + available.learning + available.new
     : null;
+
 
   if (phase === "setup") {
     return (
