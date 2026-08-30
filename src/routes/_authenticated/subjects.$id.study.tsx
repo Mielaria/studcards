@@ -273,33 +273,22 @@ function StudySession({
     return () => clearInterval(t);
   }, []);
 
+  const { data: pool } = usePool(subjectId);
+
   useEffect(() => {
+    if (!pool) return;
     (async () => {
-      await syncClock();
       try {
-        // 1) Solo metadatos ligeros para decidir la cola (miles de cartas OK).
-        const light = await fetchAllRows<{
-          id: string;
-          is_learned: boolean;
-          next_review_at: string;
-        }>((from, to) =>
-          supabase
-            .from("flashcards")
-            .select("id, is_learned, next_review_at")
-            .eq("subject_id", subjectId)
-            .order("created_at", { ascending: false })
-            .range(from, to),
-        );
-        const lastAnswers = await fetchLastAnswers(light.map((c) => c.id));
+        // La cola se decide con los metadatos ya cacheados (sin volver a bajarlos).
         const result = buildDailyQueue({
-          cards: light,
-          lastAnswers,
+          cards: pool.cards,
+          lastAnswers: pool.lastAnswers,
           now: serverNow(),
           limit: requested,
           only: mode === "failed" ? "failed" : undefined,
         });
         setBreakdown(result.breakdown);
-        // 2) Contenido completo SOLO de las cartas que entran en la sesión.
+        // Contenido completo SOLO de las cartas que entran en la sesión.
         const full = await fetchCardsByIds<Card>(
           CARD_SELECT,
           result.queue.map((c) => c.id),
@@ -310,6 +299,7 @@ function StudySession({
           .filter((c): c is Card => Boolean(c));
         setQueue(queue);
         const size = queue.length;
+
 
         const {
           data: { user },
