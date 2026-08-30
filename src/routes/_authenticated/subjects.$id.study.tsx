@@ -710,14 +710,22 @@ function VoiceAnswer({
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const recRef = useRef<ReturnType<typeof createEnglishRecognition>>(null);
-  // Cuando el usuario quiere seguir escuchando, se reinicia el reconocedor
-  // automáticamente: las palabras cortas suelen cortar la sesión enseguida.
+  // El micrófono se enciende a mano y se apaga solo: en cuanto deja de oírse
+  // voz (silencio) se detiene, sin quedarse escuchando indefinidamente.
   const wantListenRef = useRef(false);
+  const gotSpeechRef = useRef(false);
+  const silenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const supported = isSpeechRecognitionSupported();
+
+  function clearSilence() {
+    if (silenceRef.current) clearTimeout(silenceRef.current);
+    silenceRef.current = null;
+  }
 
   useEffect(
     () => () => {
       wantListenRef.current = false;
+      clearSilence();
       recRef.current?.abort();
     },
     [],
@@ -725,8 +733,16 @@ function VoiceAnswer({
 
   function stop() {
     wantListenRef.current = false;
+    clearSilence();
     recRef.current?.stop();
     setListening(false);
+  }
+
+  function armSilenceTimer(ms: number) {
+    clearSilence();
+    silenceRef.current = setTimeout(() => {
+      if (wantListenRef.current) stop();
+    }, ms);
   }
 
   function start() {
@@ -739,6 +755,7 @@ function VoiceAnswer({
     }
     recRef.current = rec;
     wantListenRef.current = true;
+    gotSpeechRef.current = false;
     rec.onresult = (event: any) => {
       let text = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -754,38 +771,50 @@ function VoiceAnswer({
         }
       }
       // No se envía automáticamente: se deja para revisar y corregir.
-      if (best.trim()) setDraft(best.trim());
+      if (best.trim()) {
+        setDraft(best.trim());
+        gotSpeechRef.current = true;
+        // Tras oír algo, 1,5 s de silencio apagan el micrófono.
+        armSilenceTimer(1500);
+      }
     };
     rec.onerror = (event: any) => {
-      // "no-speech"/"aborted" son cortes normales con palabras muy cortas:
-      // no se avisa al usuario, el onend reinicia la escucha.
       const code = event?.error;
       if (code === "not-allowed" || code === "service-not-allowed") {
         wantListenRef.current = false;
+        clearSilence();
         setListening(false);
         toast.error("No se pudo escuchar. Escribe la respuesta si falla el micrófono.");
       }
     };
     rec.onend = () => {
-      if (!wantListenRef.current || answered) {
+      // Si aún no se oyó nada, se reintenta una vez (palabras cortas como
+      // "key" cortan la sesión enseguida); si ya hubo voz, se apaga.
+      if (!wantListenRef.current || answered || gotSpeechRef.current) {
+        wantListenRef.current = false;
+        clearSilence();
         setListening(false);
         return;
       }
       try {
         rec.start();
       } catch {
+        wantListenRef.current = false;
         setListening(false);
       }
     };
     try {
       rec.start();
       setListening(true);
+      // Si no se habla nada, el micrófono se apaga solo a los 8 s.
+      armSilenceTimer(8000);
     } catch {
       wantListenRef.current = false;
       setListening(false);
       toast.error("No se pudo iniciar el micrófono.");
     }
   }
+
 
   return (
     <div className="mt-6 flex flex-col items-center gap-3">
