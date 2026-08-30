@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
@@ -52,15 +52,16 @@ type Card = {
 export const CARD_SELECT =
   "id, question, option_1, option_2, option_3, option_4, correct_option, learning_stage, is_learned, correct_answers_count, image_url, explanation, next_review_at";
 
-function StudyPage() {
-  const { id: subjectId } = Route.useParams();
-  const { mode } = Route.useSearch();
-  const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
-  const [requestedCount, setRequestedCount] = useState<number | "all">("all");
-  const [available, setAvailable] = useState<QueueBreakdown | null>(null);
-
-  useEffect(() => {
-    (async () => {
+/**
+ * Metadatos ligeros + últimas respuestas de la materia. Se cachean en React
+ * Query para que la pantalla de configuración y la sesión NO repitan la misma
+ * descarga (antes se hacía dos veces, de ahí la espera larga al empezar).
+ */
+function usePool(subjectId: string) {
+  return useQuery({
+    queryKey: ["study-pool", subjectId],
+    staleTime: 60_000,
+    queryFn: async () => {
       await syncClock();
       const cards = await fetchAllRows<{
         id: string;
@@ -75,20 +76,33 @@ function StudyPage() {
           .range(from, to),
       );
       const lastAnswers = await fetchLastAnswers(cards.map((c) => c.id));
-      const res = buildDailyQueue({
-        cards,
-        lastAnswers,
-        now: serverNow(),
-        limit: "all",
-        only: mode === "failed" ? "failed" : undefined,
-      });
-      setAvailable(res.available);
-    })();
-  }, [subjectId, mode]);
+      return { cards, lastAnswers };
+    },
+  });
+}
+
+function StudyPage() {
+  const { id: subjectId } = Route.useParams();
+  const { mode } = Route.useSearch();
+  const [phase, setPhase] = useState<"setup" | "session" | "done">("setup");
+  const [requestedCount, setRequestedCount] = useState<number | "all">("all");
+  const { data: pool } = usePool(subjectId);
+
+  const available = useMemo<QueueBreakdown | null>(() => {
+    if (!pool) return null;
+    return buildDailyQueue({
+      cards: pool.cards,
+      lastAnswers: pool.lastAnswers,
+      now: serverNow(),
+      limit: "all",
+      only: mode === "failed" ? "failed" : undefined,
+    }).available;
+  }, [pool, mode]);
 
   const totalAvailable = available
     ? available.failed + available.learning + available.new
     : null;
+
 
   if (phase === "setup") {
     return (
@@ -259,33 +273,22 @@ function StudySession({
     return () => clearInterval(t);
   }, []);
 
+  const { data: pool } = usePool(subjectId);
+
   useEffect(() => {
+    if (!pool) return;
     (async () => {
-      await syncClock();
       try {
-        // 1) Solo metadatos ligeros para decidir la cola (miles de cartas OK).
-        const light = await fetchAllRows<{
-          id: string;
-          is_learned: boolean;
-          next_review_at: string;
-        }>((from, to) =>
-          supabase
-            .from("flashcards")
-            .select("id, is_learned, next_review_at")
-            .eq("subject_id", subjectId)
-            .order("created_at", { ascending: false })
-            .range(from, to),
-        );
-        const lastAnswers = await fetchLastAnswers(light.map((c) => c.id));
+        // La cola se decide con los metadatos ya cacheados (sin volver a bajarlos).
         const result = buildDailyQueue({
-          cards: light,
-          lastAnswers,
+          cards: pool.cards,
+          lastAnswers: pool.lastAnswers,
           now: serverNow(),
           limit: requested,
           only: mode === "failed" ? "failed" : undefined,
         });
         setBreakdown(result.breakdown);
-        // 2) Contenido completo SOLO de las cartas que entran en la sesión.
+        // Contenido completo SOLO de las cartas que entran en la sesión.
         const full = await fetchCardsByIds<Card>(
           CARD_SELECT,
           result.queue.map((c) => c.id),
@@ -296,6 +299,7 @@ function StudySession({
           .filter((c): c is Card => Boolean(c));
         setQueue(queue);
         const size = queue.length;
+
 
         const {
           data: { user },
@@ -317,7 +321,9 @@ function StudySession({
         toast.error((e as Error).message);
       }
     })();
-  }, [subjectId, requested, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectId, requested, mode, Boolean(pool)]);
+
 
   const current = queue?.[index];
 
@@ -436,7 +442,9 @@ function StudySession({
           })
           .eq("id", sessionId);
       }
-      await qc.invalidateQueries();
+      // refetchType "all" refresca también las consultas que no están montadas
+      // (contadores del inicio y de la materia) para que se vean actualizadas.
+      await qc.invalidateQueries({ refetchType: "all" });
       onFinish();
       return;
     }
@@ -524,6 +532,7 @@ function StudySession({
             value={current.image_url}
             alt=""
             className="mb-4 max-h-72 w-full rounded-2xl bg-muted object-contain"
+            expandable
           />
         )}
         <h2 className="font-display text-xl font-semibold leading-snug md:text-2xl">
@@ -702,14 +711,22 @@ function VoiceAnswer({
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const recRef = useRef<ReturnType<typeof createEnglishRecognition>>(null);
-  // Cuando el usuario quiere seguir escuchando, se reinicia el reconocedor
-  // automáticamente: las palabras cortas suelen cortar la sesión enseguida.
+  // El micrófono se enciende a mano y se apaga solo: en cuanto deja de oírse
+  // voz (silencio) se detiene, sin quedarse escuchando indefinidamente.
   const wantListenRef = useRef(false);
+  const gotSpeechRef = useRef(false);
+  const silenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const supported = isSpeechRecognitionSupported();
+
+  function clearSilence() {
+    if (silenceRef.current) clearTimeout(silenceRef.current);
+    silenceRef.current = null;
+  }
 
   useEffect(
     () => () => {
       wantListenRef.current = false;
+      clearSilence();
       recRef.current?.abort();
     },
     [],
@@ -717,8 +734,16 @@ function VoiceAnswer({
 
   function stop() {
     wantListenRef.current = false;
+    clearSilence();
     recRef.current?.stop();
     setListening(false);
+  }
+
+  function armSilenceTimer(ms: number) {
+    clearSilence();
+    silenceRef.current = setTimeout(() => {
+      if (wantListenRef.current) stop();
+    }, ms);
   }
 
   function start() {
@@ -731,6 +756,7 @@ function VoiceAnswer({
     }
     recRef.current = rec;
     wantListenRef.current = true;
+    gotSpeechRef.current = false;
     rec.onresult = (event: any) => {
       let text = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -746,38 +772,50 @@ function VoiceAnswer({
         }
       }
       // No se envía automáticamente: se deja para revisar y corregir.
-      if (best.trim()) setDraft(best.trim());
+      if (best.trim()) {
+        setDraft(best.trim());
+        gotSpeechRef.current = true;
+        // Tras oír algo, 1,5 s de silencio apagan el micrófono.
+        armSilenceTimer(1500);
+      }
     };
     rec.onerror = (event: any) => {
-      // "no-speech"/"aborted" son cortes normales con palabras muy cortas:
-      // no se avisa al usuario, el onend reinicia la escucha.
       const code = event?.error;
       if (code === "not-allowed" || code === "service-not-allowed") {
         wantListenRef.current = false;
+        clearSilence();
         setListening(false);
         toast.error("No se pudo escuchar. Escribe la respuesta si falla el micrófono.");
       }
     };
     rec.onend = () => {
-      if (!wantListenRef.current || answered) {
+      // Si aún no se oyó nada, se reintenta una vez (palabras cortas como
+      // "key" cortan la sesión enseguida); si ya hubo voz, se apaga.
+      if (!wantListenRef.current || answered || gotSpeechRef.current) {
+        wantListenRef.current = false;
+        clearSilence();
         setListening(false);
         return;
       }
       try {
         rec.start();
       } catch {
+        wantListenRef.current = false;
         setListening(false);
       }
     };
     try {
       rec.start();
       setListening(true);
+      // Si no se habla nada, el micrófono se apaga solo a los 8 s.
+      armSilenceTimer(8000);
     } catch {
       wantListenRef.current = false;
       setListening(false);
       toast.error("No se pudo iniciar el micrófono.");
     }
   }
+
 
   return (
     <div className="mt-6 flex flex-col items-center gap-3">

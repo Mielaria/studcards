@@ -73,38 +73,38 @@ async function fetchLastAnswersRpc(
   return map;
 }
 
-/** Fallback: descarga el historial paginado y reduce en cliente. */
+/**
+ * Fallback sin RPC: UNA sola pasada por el historial del usuario, de la más
+ * reciente a la más antigua. Se corta en cuanto ya se conoce la última
+ * respuesta de todas las cartas pedidas (mucho más rápido que consultar el
+ * historial en decenas de trozos de IDs).
+ */
 async function fetchLastAnswersFallback(
   cardIds: string[],
 ): Promise<Map<string, LastAnswer>> {
+  const wanted = new Set(cardIds);
   const map = new Map<string, LastAnswer>();
-  const CHUNK = 200;
-  for (let i = 0; i < cardIds.length; i += CHUNK) {
-    const chunk = cardIds.slice(i, i + CHUNK);
-    const data = await fetchAllRows<{
-      flashcard_id: string;
-      is_correct: boolean;
-      answered_at: string;
-    }>((from, to) =>
-      supabase
-        .from("card_review_history")
-        .select("flashcard_id, is_correct, answered_at")
-        .in("flashcard_id", chunk)
-        .order("answered_at", { ascending: false })
-        .range(from, to),
-    );
-    for (const row of data) {
-      const prev = map.get(row.flashcard_id);
-      if (!prev || new Date(row.answered_at) > new Date(prev.answered_at)) {
-        map.set(row.flashcard_id, {
-          is_correct: row.is_correct,
-          answered_at: row.answered_at,
-        });
-      }
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("card_review_history")
+      .select("flashcard_id, is_correct, answered_at")
+      .order("answered_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    for (const row of rows) {
+      if (!wanted.has(row.flashcard_id) || map.has(row.flashcard_id)) continue;
+      map.set(row.flashcard_id, {
+        is_correct: row.is_correct,
+        answered_at: row.answered_at,
+      });
     }
+    if (rows.length < PAGE || map.size >= wanted.size) break;
   }
   return map;
 }
+
 
 /** Última respuesta (por answered_at) de cada carta indicada. */
 export async function fetchLastAnswers(
