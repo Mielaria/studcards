@@ -321,7 +321,9 @@ function StudySession({
         toast.error((e as Error).message);
       }
     })();
-  }, [subjectId, requested, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectId, requested, mode, Boolean(pool)]);
+
 
   const current = queue?.[index];
 
