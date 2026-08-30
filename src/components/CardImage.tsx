@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Maximize2, X } from "lucide-react";
 import { CARD_BUCKET, getImageUrl } from "@/lib/card-images";
 
 /** Hook: resuelve un valor de image_url (ruta de Storage, data URL o http) a una URL mostrable. */
