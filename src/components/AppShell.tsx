@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <main className="app-main pb-28 md:ml-60 md:pb-8">
         <div className="app-container mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-10">
-          <div className="mb-2 flex justify-end">
+          <div className="app-chrome mb-2 flex justify-end">
             <ThemeToggle />
           </div>
           {children}
