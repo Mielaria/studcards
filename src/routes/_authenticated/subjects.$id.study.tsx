@@ -11,6 +11,7 @@ import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
 import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
+import { FONT_CLASSES, getFontSize, setFontSize, type FontSize } from "@/lib/font-pref";
 import { readWrittenEnabled } from "@/lib/written-pref";
 import { readAudioOnly } from "@/lib/audio-pref";
 import { playAnswerSound } from "@/lib/sfx";
@@ -259,6 +260,9 @@ function StudySession({
   const [writtenInput, setWrittenInput] = useState("");
   const [writtenResult, setWrittenResult] = useState<boolean | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [fontSize, setFontSizeState] = useState<FontSize>("md");
+  useEffect(() => setFontSizeState(getFontSize()), []);
+  const font = FONT_CLASSES[fontSize];
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [correct, setCorrect] = useState(0);
   const [incorrect, setIncorrect] = useState(0);
@@ -496,9 +500,39 @@ function StudySession({
           <span className="text-primary">{index + 1}</span>
           <span className="text-muted-foreground"> / {queue.length}</span>
         </span>
-        <span className="inline-flex items-center gap-1">
-          <Clock className="h-4 w-4" /> {formatTime(elapsed)}
-        </span>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex items-center gap-1 rounded-full border border-border bg-card p-0.5"
+            role="group"
+            aria-label="Tamaño del texto"
+          >
+            {(["sm", "md", "lg"] as FontSize[]).map((size, i) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => {
+                  setFontSizeState(size);
+                  setFontSize(size);
+                }}
+                aria-pressed={fontSize === size}
+                aria-label={`Texto ${["pequeño", "mediano", "grande"][i]}`}
+                title={`Texto ${["pequeño", "mediano", "grande"][i]}`}
+                className={`flex h-7 w-7 items-center justify-center rounded-full font-display font-bold leading-none transition-colors ${
+                  ["text-[0.65rem]", "text-sm", "text-base"][i]
+                } ${
+                  fontSize === size
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                A
+              </button>
+            ))}
+          </div>
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-4 w-4" /> {formatTime(elapsed)}
+          </span>
+        </div>
       </header>
 
       {breakdown && (
@@ -535,7 +569,7 @@ function StudySession({
             expandable
           />
         )}
-        <h2 className="font-display text-xl font-semibold leading-snug md:text-2xl">
+        <h2 className={`font-display font-semibold leading-snug ${font.question}`}>
           {current.question}
         </h2>
 
@@ -574,7 +608,10 @@ function StudySession({
                 placeholder="Escribe tu respuesta…"
                 aria-label="Tu respuesta"
                 autoFocus
-                className={`min-w-0 flex-1 rounded-xl border px-3.5 py-3 text-sm outline-none ${
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className={`min-w-0 flex-1 rounded-xl border px-3.5 py-3 outline-none ${font.body} ${
                   answered
                     ? isCorrect
                       ? "border-success bg-success/10"
@@ -615,7 +652,7 @@ function StudySession({
                   <button
                     disabled={answered}
                     onClick={() => answer(n)}
-                    className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left text-sm transition-colors ${styles}`}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-colors ${font.body} ${styles}`}
                   >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs font-semibold">
                       {String.fromCharCode(64 + shuffledOptions.findIndex((o) => o.n === n) + 1)}
@@ -634,7 +671,7 @@ function StudySession({
 
         {answered && (
           <div
-            className={`mt-5 rounded-2xl p-4 text-sm ${
+            className={`mt-5 rounded-2xl p-4 ${font.body} ${
               isCorrect
                 ? "bg-success/15 text-success-foreground"
                 : "bg-destructive/10 text-destructive-foreground"
