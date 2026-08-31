@@ -31,6 +31,13 @@ describe("answersMatch", () => {
     expect(answersMatch("orange", "apple")).toBe(false);
   });
 
+  it("ignora mayúscula inicial y espacios invisibles", () => {
+    expect(answersMatch("Key", "key")).toBe(true);
+    expect(answersMatch("View ", "view")).toBe(true);
+    expect(answersMatch("the\u00A0cat", "the cat")).toBe(true);
+    expect(answersMatch("\u200Bkey", "key")).toBe(true);
+  });
+
   it("rechaza respuesta vacía", () => {
     expect(answersMatch("   ", "apple")).toBe(false);
   });
