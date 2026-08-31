@@ -12,6 +12,7 @@ export const WRITTEN_ANSWER_PROBABILITY = 0.3;
  */
 export function normalizeAnswer(value: string): string {
   return value
+    .replace(/[\s\u00A0\u200B-\u200D\uFEFF]+/g, " ")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
