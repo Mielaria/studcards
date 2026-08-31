@@ -63,29 +63,78 @@ export function CardImage({
       >
         <Maximize2 className="h-4 w-4" />
       </button>
-      {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/90 p-4"
-        >
-          <img
-            src={url}
-            alt={alt}
-            className="max-h-full max-w-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Cerrar imagen"
-            className="absolute right-4 top-4 rounded-full bg-background/90 p-2 text-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-      )}
+      {open && <Lightbox url={url} alt={alt} onClose={() => setOpen(false)} />}
     </div>
   );
 }
+
+const ZOOM = 2.75;
+
+/** Visor a pantalla completa con lupa: clic sobre la imagen amplía ese punto. */
+function Lightbox({
+  url,
+  alt,
+  onClose,
+}: {
+  url: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  const [zoomed, setZoomed] = useState(false);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 });
+
+  const onImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    if (zoomed) {
+      setZoomed(false);
+    } else {
+      setOrigin({ x, y });
+      setZoomed(true);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-foreground/90 p-4"
+    >
+      <img
+        src={url}
+        alt={alt}
+        onClick={onImageClick}
+        onMouseMove={(e) => {
+          if (!zoomed) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          setOrigin({
+            x: ((e.clientX - rect.left) / rect.width) * 100,
+            y: ((e.clientY - rect.top) / rect.height) * 100,
+          });
+        }}
+        style={{
+          transform: `scale(${zoomed ? ZOOM : 1})`,
+          transformOrigin: `${origin.x}% ${origin.y}%`,
+        }}
+        className={`max-h-full max-w-full object-contain transition-transform duration-200 ${
+          zoomed ? "cursor-zoom-out" : "cursor-zoom-in"
+        }`}
+      />
+      <span className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-foreground">
+        {zoomed ? "Toca la imagen para alejar" : "Toca la imagen para acercar"}
+      </span>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Cerrar imagen"
+        className="absolute right-4 top-4 rounded-full bg-background/90 p-2 text-foreground"
+      >
+        <X className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
