@@ -26,3 +26,10 @@ export const FONT_CLASSES: Record<
   md: { question: "text-xl md:text-2xl", body: "text-sm", small: "text-xs" },
   lg: { question: "text-2xl md:text-3xl", body: "text-base", small: "text-sm" },
 };
+
+/** Escala aplicada a TODO el contenido de la sesión (cronómetro, opciones, precisión…). */
+export const FONT_SCALE: Record<FontSize, number> = {
+  sm: 0.78,
+  md: 1,
+  lg: 1.12,
+};
