@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-border bg-card px-4 py-6 md:flex md:flex-col">
+      <aside className="app-chrome fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-border bg-card px-4 py-6 md:flex md:flex-col">
         <Link to="/dashboard" className="mb-8 flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <GraduationCap className="h-5 w-5" />
