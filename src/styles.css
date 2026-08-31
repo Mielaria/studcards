@@ -142,3 +142,24 @@
     letter-spacing: -0.01em;
   }
 }
+
+/* Modo inmersivo: pantalla completa sin navegación ni barra de scroll. */
+body.immersive .app-chrome {
+  display: none !important;
+}
+body.immersive .app-main {
+  margin-left: 0 !important;
+  padding-bottom: 1rem !important;
+}
+body.immersive .app-container {
+  max-width: none;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.75rem;
+}
+body.immersive {
+  scrollbar-width: none;
+}
+body.immersive::-webkit-scrollbar {
+  display: none;
+}
