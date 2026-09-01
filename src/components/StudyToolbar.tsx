@@ -84,16 +84,16 @@ export function FontSizeButtons({
       role="group"
       aria-label="Tamaño del texto"
     >
-      {(["sm", "md", "lg"] as FontSize[]).map((size, i) => (
+      {(["sm", "md", "lg", "xl"] as FontSize[]).map((size, i) => (
         <button
           key={size}
           type="button"
           onClick={() => onChange(size)}
           aria-pressed={value === size}
-          aria-label={`Texto ${["pequeño", "mediano", "grande"][i]}`}
-          title={`Texto ${["pequeño", "mediano", "grande"][i]}`}
+          aria-label={`Texto ${["pequeño", "mediano", "grande", "extra grande"][i]}`}
+          title={`Texto ${["pequeño", "mediano", "grande", "extra grande"][i]}`}
           className={`flex h-7 w-7 items-center justify-center rounded-full font-display font-bold leading-none transition-colors ${
-            ["text-[0.65rem]", "text-sm", "text-base"][i]
+            ["text-[0.65rem]", "text-sm", "text-base", "text-xl"][i]
           } ${
             value === size
               ? "bg-primary text-primary-foreground"
