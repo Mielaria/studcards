@@ -11,7 +11,13 @@ import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
 import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
-import { FONT_CLASSES, getFontSize, setFontSize, type FontSize } from "@/lib/font-pref";
+import { FONT_CLASSES, FONT_SCALE } from "@/lib/font-pref";
+import {
+  FontSizeButtons,
+  ImmersiveButton,
+  useFontSizePref,
+  useImmersive,
+} from "@/components/StudyToolbar";
 import { readWrittenEnabled } from "@/lib/written-pref";
 import { readAudioOnly } from "@/lib/audio-pref";
 import { playAnswerSound } from "@/lib/sfx";
