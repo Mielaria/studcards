@@ -419,18 +419,28 @@ function CardList({ subjectId }: { subjectId: string }) {
       queryKey: ["subject-cards", subjectId, debounced],
       initialPageParam: 0,
       queryFn: async ({ pageParam }) => {
-        const pattern = debounced.replace(/[%_\\]/g, "");
+        // Insensible a mayúsculas (ilike) y a tildes: cada letra acentuable se
+        // sustituye por "_", que coincide con cualquier carácter.
+        const pattern = debounced
+          .replace(/[%_\\]/g, "")
+          .replace(/[aáàäâeéèëêiíìïîoóòöôuúùüûnñcçyý]/gi, "_");
         let q = supabase
           .from("flashcards")
           .select("id, question, is_learned, learning_stage, correct_answers_count")
           .eq("subject_id", subjectId)
           .order("created_at", { ascending: false })
           .range(pageParam, pageParam + CARD_PAGE - 1);
-        if (pattern) q = q.ilike("question", `%${pattern}%`);
+        if (pattern)
+          q = q.or(
+            ["question", "option_1", "option_2", "option_3", "option_4"]
+              .map((c) => `${c}.ilike.%${pattern}%`)
+              .join(","),
+          );
         const { data, error } = await q;
         if (error) throw error;
         return data ?? [];
       },
+
       getNextPageParam: (last, pages) =>
         last.length === CARD_PAGE ? pages.length * CARD_PAGE : undefined,
     });
