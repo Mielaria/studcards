@@ -710,6 +710,7 @@ function StudySession({
         </span>
         <span>✗ {incorrect}</span>
       </div>
+      </div>
     </AppShell>
   );
 }
