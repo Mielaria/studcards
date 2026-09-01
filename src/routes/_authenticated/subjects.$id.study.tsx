@@ -501,40 +501,17 @@ function StudySession({
 
   return (
     <AppShell>
+      <div style={{ zoom: FONT_SCALE[fontSize] }}>
       <header className="mb-4 flex items-center justify-between text-sm text-muted-foreground">
-        <span className="font-display text-lg font-bold">
-          <span className="text-primary">{index + 1}</span>
-          <span className="text-muted-foreground"> / {queue.length}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <ImmersiveButton active={immersive.active} onToggle={immersive.toggle} />
+          <span className="font-display text-lg font-bold">
+            <span className="text-primary">{index + 1}</span>
+            <span className="text-muted-foreground"> / {queue.length}</span>
+          </span>
+        </div>
         <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-1 rounded-full border border-border bg-card p-0.5"
-            role="group"
-            aria-label="Tamaño del texto"
-          >
-            {(["sm", "md", "lg"] as FontSize[]).map((size, i) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => {
-                  setFontSizeState(size);
-                  setFontSize(size);
-                }}
-                aria-pressed={fontSize === size}
-                aria-label={`Texto ${["pequeño", "mediano", "grande"][i]}`}
-                title={`Texto ${["pequeño", "mediano", "grande"][i]}`}
-                className={`flex h-7 w-7 items-center justify-center rounded-full font-display font-bold leading-none transition-colors ${
-                  ["text-[0.65rem]", "text-sm", "text-base"][i]
-                } ${
-                  fontSize === size
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                A
-              </button>
-            ))}
-          </div>
+          <FontSizeButtons value={fontSize} onChange={changeFontSize} />
           <span className="inline-flex items-center gap-1">
             <Clock className="h-4 w-4" /> {formatTime(elapsed)}
           </span>
