@@ -11,7 +11,13 @@ import { buildDailyQueue, type QueueBreakdown } from "@/lib/study-queue";
 import { fetchLastAnswers } from "@/lib/card-state";
 import { fetchCardsByIds } from "@/lib/card-fetch";
 import { WRITTEN_ANSWER_PROBABILITY, answersMatch } from "@/lib/written";
-import { FONT_CLASSES, getFontSize, setFontSize, type FontSize } from "@/lib/font-pref";
+import { FONT_CLASSES, FONT_SCALE } from "@/lib/font-pref";
+import {
+  FontSizeButtons,
+  ImmersiveButton,
+  useFontSizePref,
+  useImmersive,
+} from "@/components/StudyToolbar";
 import { readWrittenEnabled } from "@/lib/written-pref";
 import { readAudioOnly } from "@/lib/audio-pref";
 import { playAnswerSound } from "@/lib/sfx";
@@ -260,9 +266,9 @@ function StudySession({
   const [writtenInput, setWrittenInput] = useState("");
   const [writtenResult, setWrittenResult] = useState<boolean | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [fontSize, setFontSizeState] = useState<FontSize>("md");
-  useEffect(() => setFontSizeState(getFontSize()), []);
-  const font = FONT_CLASSES[fontSize];
+  const { size: fontSize, change: changeFontSize } = useFontSizePref();
+  const immersive = useImmersive();
+  const font = FONT_CLASSES.md;
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [correct, setCorrect] = useState(0);
   const [incorrect, setIncorrect] = useState(0);
@@ -495,40 +501,17 @@ function StudySession({
 
   return (
     <AppShell>
+      <div style={{ zoom: FONT_SCALE[fontSize] }}>
       <header className="mb-4 flex items-center justify-between text-sm text-muted-foreground">
-        <span className="font-display text-lg font-bold">
-          <span className="text-primary">{index + 1}</span>
-          <span className="text-muted-foreground"> / {queue.length}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <ImmersiveButton active={immersive.active} onToggle={immersive.toggle} />
+          <span className="font-display text-lg font-bold">
+            <span className="text-primary">{index + 1}</span>
+            <span className="text-muted-foreground"> / {queue.length}</span>
+          </span>
+        </div>
         <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-1 rounded-full border border-border bg-card p-0.5"
-            role="group"
-            aria-label="Tamaño del texto"
-          >
-            {(["sm", "md", "lg"] as FontSize[]).map((size, i) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => {
-                  setFontSizeState(size);
-                  setFontSize(size);
-                }}
-                aria-pressed={fontSize === size}
-                aria-label={`Texto ${["pequeño", "mediano", "grande"][i]}`}
-                title={`Texto ${["pequeño", "mediano", "grande"][i]}`}
-                className={`flex h-7 w-7 items-center justify-center rounded-full font-display font-bold leading-none transition-colors ${
-                  ["text-[0.65rem]", "text-sm", "text-base"][i]
-                } ${
-                  fontSize === size
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                A
-              </button>
-            ))}
-          </div>
+          <FontSizeButtons value={fontSize} onChange={changeFontSize} />
           <span className="inline-flex items-center gap-1">
             <Clock className="h-4 w-4" /> {formatTime(elapsed)}
           </span>
@@ -726,6 +709,7 @@ function StudySession({
           Precisión: {totalStudied ? Math.round((correct / totalStudied) * 100) : 0}%
         </span>
         <span>✗ {incorrect}</span>
+      </div>
       </div>
     </AppShell>
   );

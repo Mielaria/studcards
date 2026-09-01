@@ -11,6 +11,13 @@ import { shuffle } from "@/lib/srs";
 import { playAnswerSound } from "@/lib/sfx";
 import { Check, X, Clock, Zap, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
+import { FONT_SCALE } from "@/lib/font-pref";
+import {
+  FontSizeButtons,
+  ImmersiveButton,
+  useFontSizePref,
+  useImmersive,
+} from "@/components/StudyToolbar";
 
 export const Route = createFileRoute("/_authenticated/practice")({
   head: () => ({
@@ -49,6 +56,8 @@ function PracticePage() {
   const [incorrect, setIncorrect] = useState(0);
   const startedAt = useRef<Date | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const { size: fontSize, change: changeFontSize } = useFontSizePref();
+  const immersive = useImmersive();
 
   const { data: subjects } = useQuery({
     queryKey: ["subjects-simple"],
@@ -205,14 +214,21 @@ function PracticePage() {
 
   return (
     <AppShell>
+      <div style={{ zoom: FONT_SCALE[fontSize] }}>
       <header className="mb-4 flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          {index + 1} / {session.length} · Repaso libre
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Clock className="h-4 w-4" /> {Math.floor(elapsed / 60)}:
-          {(elapsed % 60).toString().padStart(2, "0")}
-        </span>
+        <div className="flex items-center gap-2">
+          <ImmersiveButton active={immersive.active} onToggle={immersive.toggle} />
+          <span>
+            {index + 1} / {session.length} · Repaso libre
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <FontSizeButtons value={fontSize} onChange={changeFontSize} />
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-4 w-4" /> {Math.floor(elapsed / 60)}:
+            {(elapsed % 60).toString().padStart(2, "0")}
+          </span>
+        </div>
       </header>
       <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
         <div
@@ -315,6 +331,7 @@ function PracticePage() {
         <span>✓ {correct}</span>
         <span>Precisión: {total ? Math.round((correct / total) * 100) : 0}%</span>
         <span>✗ {incorrect}</span>
+      </div>
       </div>
     </AppShell>
   );
