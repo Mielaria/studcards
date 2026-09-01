@@ -266,9 +266,9 @@ function StudySession({
   const [writtenInput, setWrittenInput] = useState("");
   const [writtenResult, setWrittenResult] = useState<boolean | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [fontSize, setFontSizeState] = useState<FontSize>("md");
-  useEffect(() => setFontSizeState(getFontSize()), []);
-  const font = FONT_CLASSES[fontSize];
+  const { size: fontSize, change: changeFontSize } = useFontSizePref();
+  const immersive = useImmersive();
+  const font = FONT_CLASSES.md;
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [correct, setCorrect] = useState(0);
   const [incorrect, setIncorrect] = useState(0);
