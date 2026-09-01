@@ -430,12 +430,19 @@ function CardList({ subjectId }: { subjectId: string }) {
           .eq("subject_id", subjectId)
           .order("created_at", { ascending: false })
           .range(pageParam, pageParam + CARD_PAGE - 1);
-        if (pattern)
+        if (pattern) {
+          // Solo pregunta o respuesta correcta: cada opción correcta posible
+          // (1-4) se combina con su campo option_N correspondiente.
           q = q.or(
-            ["question", "option_1", "option_2", "option_3", "option_4"]
-              .map((c) => `${c}.ilike.%${pattern}%`)
-              .join(","),
+            [
+              "question.ilike.%".concat(pattern, "%"),
+              ...[1, 2, 3, 4].map(
+                (n) =>
+                  `and(correct_option.eq.${n},option_${n}.ilike.%${pattern}%)`,
+              ),
+            ].join(","),
           );
+        }
         const { data, error } = await q;
         if (error) throw error;
         return data ?? [];
