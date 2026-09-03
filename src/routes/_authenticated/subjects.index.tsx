@@ -44,13 +44,18 @@ function SubjectsPage() {
     queryFn: async (): Promise<SubjectWithCounts[]> => {
       const { data: subs, error } = await supabase
         .from("subjects")
-        .select("id, name, icon")
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: true });
+        .select("id, name, icon");
       if (error) throw error;
+      const collator = new Intl.Collator("es", {
+        numeric: true,
+        sensitivity: "base",
+      });
+      const sorted = [...(subs ?? [])].sort((a, b) =>
+        collator.compare(a.name ?? "", b.name ?? ""),
+      );
       const now = serverNow().toISOString();
       const results = await Promise.all(
-        (subs ?? []).map(async (s) => {
+        sorted.map(async (s) => {
           const [total, due, learned] = await Promise.all([
             supabase
               .from("flashcards")
