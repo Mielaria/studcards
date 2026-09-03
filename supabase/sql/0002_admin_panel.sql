@@ -156,40 +156,20 @@ begin
     where s.completed_at is not null
     group by 1, 2
   ),
-  streaks as (
-    select d.user_id,
-           count(*)::int as streak_days
+  streak_calc as (
+    select user_id, count(*)::int as streak_days
     from (
-      select user_id, d,
-             d - (row_number() over (partition by user_id order by d desc)) * interval '-1 day' as grp
+      select user_id,
+             d,
+             (d + ((row_number() over (partition by user_id order by d desc)) || ' days')::interval)::date as grp,
+             max(d) over (partition by user_id) as last_d
       from days
     ) x
-    join days d on d.user_id = x.user_id and d.d = x.d
-    where x.d >= ((now() at time zone 'America/Bogota')::date - interval '1 day')
-       or true
-    group by d.user_id
+    where x.last_d >= ((now() at time zone 'America/Bogota')::date - 1)
+      and x.grp = (x.last_d + interval '1 day')::date
+    group by user_id
   ),
-  streak_calc as (
-    select user_id,
-           (
-             select count(*)::int
-             from generate_series(0, 3650) g
-             where exists (
-               select 1 from days dd
-               where dd.user_id = q.user_id
-                 and dd.d = (now() at time zone 'America/Bogota')::date - g
-             )
-             and not exists (
-               select 1 from generate_series(0, g) h
-               where not exists (
-                 select 1 from days d2
-                 where d2.user_id = q.user_id
-                   and d2.d = (now() at time zone 'America/Bogota')::date - h
-               )
-             )
-           ) as streak_days
-    from (select distinct user_id from days) q
-  ),
+
   cards as (
     select f.user_id,
            count(*) filter (where f.is_learned)::int as learned_count,
