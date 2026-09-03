@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { X, Check, Loader2, Trash2 } from "lucide-react";
+import { X, Check, Loader2, Trash2, Upload } from "lucide-react";
+import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { CardImage } from "@/components/CardImage";
-import { CARD_BUCKET, removeImages } from "@/lib/card-images";
+import { getCroppedDataUrl, fileToDataUrl } from "@/lib/image-crop";
+import { CARD_BUCKET, removeImages, uploadDataUrl } from "@/lib/card-images";
 
 export function EditCardModal({
   cardId,
