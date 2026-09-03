@@ -87,6 +87,44 @@ export function EditCardModal({
     onError: () => toast.error("No se pudo eliminar la imagen"),
   });
 
+  const [rawUrl, setRawUrl] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Crop>();
+  const [pixelCrop, setPixelCrop] = useState<PixelCrop | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  const setImage = useMutation({
+    mutationFn: async (dataUrl: string) => {
+      const path = await uploadDataUrl(CARD_BUCKET, dataUrl);
+      const { error } = await supabase
+        .from("flashcards")
+        .update({ image_url: path })
+        .eq("id", cardId);
+      if (error) throw error;
+      await removeImages(CARD_BUCKET, [card?.image_url]);
+    },
+    onSuccess: () => {
+      toast.success("Imagen actualizada");
+      setRawUrl(null);
+      qc.invalidateQueries({ queryKey: ["subject-cards", subjectId] });
+      qc.invalidateQueries({ queryKey: ["flashcard", cardId] });
+    },
+    onError: () => toast.error("No se pudo subir la imagen"),
+  });
+
+  async function onFile(f: File) {
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error("Imagen demasiado grande (máx 8 MB)");
+      return;
+    }
+    setRawUrl(await fileToDataUrl(f));
+  }
+
+  async function confirmCrop() {
+    if (!imgRef.current || !pixelCrop) return;
+    const dataUrl = await getCroppedDataUrl(imgRef.current, pixelCrop);
+    setImage.mutate(dataUrl);
+  }
+
   const valid =
     question.trim().length > 0 && options.every((o) => o.trim().length > 0);
 
