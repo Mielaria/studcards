@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { X, Check, Loader2, Trash2 } from "lucide-react";
+import { X, Check, Loader2, Trash2, Upload } from "lucide-react";
+import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { CardImage } from "@/components/CardImage";
-import { CARD_BUCKET, removeImages } from "@/lib/card-images";
+import { getCroppedDataUrl, fileToDataUrl } from "@/lib/image-crop";
+import { CARD_BUCKET, removeImages, uploadDataUrl } from "@/lib/card-images";
 
 export function EditCardModal({
   cardId,
@@ -84,6 +87,44 @@ export function EditCardModal({
     onError: () => toast.error("No se pudo eliminar la imagen"),
   });
 
+  const [rawUrl, setRawUrl] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Crop>();
+  const [pixelCrop, setPixelCrop] = useState<PixelCrop | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  const setImage = useMutation({
+    mutationFn: async (dataUrl: string) => {
+      const path = await uploadDataUrl(CARD_BUCKET, dataUrl);
+      const { error } = await supabase
+        .from("flashcards")
+        .update({ image_url: path })
+        .eq("id", cardId);
+      if (error) throw error;
+      await removeImages(CARD_BUCKET, [card?.image_url]);
+    },
+    onSuccess: () => {
+      toast.success("Imagen actualizada");
+      setRawUrl(null);
+      qc.invalidateQueries({ queryKey: ["subject-cards", subjectId] });
+      qc.invalidateQueries({ queryKey: ["flashcard", cardId] });
+    },
+    onError: () => toast.error("No se pudo subir la imagen"),
+  });
+
+  async function onFile(f: File) {
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error("Imagen demasiado grande (máx 8 MB)");
+      return;
+    }
+    setRawUrl(await fileToDataUrl(f));
+  }
+
+  async function confirmCrop() {
+    if (!imgRef.current || !pixelCrop) return;
+    const dataUrl = await getCroppedDataUrl(imgRef.current, pixelCrop);
+    setImage.mutate(dataUrl);
+  }
+
   const valid =
     question.trim().length > 0 && options.every((o) => o.trim().length > 0);
 
@@ -113,22 +154,78 @@ export function EditCardModal({
           </div>
         ) : (
           <div className="grid gap-4">
-            {card?.image_url && (
-              <div>
-                <CardImage
-                  value={card.image_url}
-                  className="max-h-56 w-full rounded-2xl object-contain"
+            <div className="rounded-2xl border border-border p-4">
+              {card?.image_url && !rawUrl && (
+                <div className="mb-3">
+                  <CardImage
+                    value={card.image_url}
+                    className="max-h-56 w-full rounded-2xl object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage.mutate()}
+                    disabled={removeImage.isPending}
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-destructive disabled:opacity-60"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Quitar imagen
+                  </button>
+                </div>
+              )}
+
+              {rawUrl && (
+                <div className="mb-3">
+                  <ReactCrop
+                    crop={crop}
+                    onChange={(c) => setCrop(c)}
+                    onComplete={(c) => setPixelCrop(c)}
+                  >
+                    <img
+                      ref={imgRef}
+                      src={rawUrl}
+                      alt=""
+                      onLoad={(e) => {
+                        const { width, height } = e.currentTarget;
+                        setCrop({ unit: "px", x: 0, y: 0, width, height });
+                        setPixelCrop({ unit: "px", x: 0, y: 0, width, height });
+                      }}
+                      style={{ maxHeight: 320, width: "auto" }}
+                    />
+                  </ReactCrop>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={confirmCrop}
+                      disabled={setImage.isPending}
+                      className="rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-60"
+                    >
+                      {setImage.isPending ? "Subiendo…" : "Usar imagen"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRawUrl(null)}
+                      className="rounded-full border border-border px-3 py-1.5 text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold">
+                <Upload className="h-4 w-4" />
+                {card?.image_url ? "Cambiar imagen" : "Agregar imagen"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onFile(f);
+                    e.target.value = "";
+                  }}
                 />
-                <button
-                  type="button"
-                  onClick={() => removeImage.mutate()}
-                  disabled={removeImage.isPending}
-                  className="mt-2 inline-flex items-center gap-1 text-xs text-destructive disabled:opacity-60"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Quitar imagen
-                </button>
-              </div>
-            )}
+              </label>
+            </div>
             <div>
               <label className="mb-1 block text-sm font-medium">Pregunta</label>
               <textarea
