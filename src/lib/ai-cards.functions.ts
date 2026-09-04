@@ -28,12 +28,28 @@ El índice correcto es un entero 0-3.`;
 export const generateCards = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => InputSchema.parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const key = process.env.studcards;
     if (!key) throw new Error("Falta el secret studcards");
 
     if (!data.text && !data.imageDataUrl)
       throw new Error("Aporta texto o imagen");
+
+    // Cupo de IA (si el SQL del panel aún no se ejecutó, se permite igual).
+    const rpc = (
+      context.supabase as unknown as {
+        rpc: (
+          fn: string,
+          args?: Record<string, unknown>,
+        ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+      }
+    ).rpc.bind(context.supabase);
+    const quota = await rpc("consume_ai_quota", { _cards: data.count });
+    if (!quota.error) {
+      const q = quota.data as { allowed?: boolean; reason?: string } | null;
+      if (q && q.allowed === false)
+        throw new Error(q.reason ?? "IA no disponible para tu cuenta.");
+    }
 
     const userText =
       `Genera exactamente ${data.count} flashcards de opción múltiple.` +
