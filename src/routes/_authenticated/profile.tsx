@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { checkIsAdmin } from "@/lib/admin.functions";
 import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -13,6 +15,7 @@ import {
   Check,
   X,
   Camera,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportPdf } from "@/lib/backup";
@@ -73,6 +76,12 @@ function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const isAdminFn = useServerFn(checkIsAdmin);
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is-admin"],
+    queryFn: () => isAdminFn({ data: undefined }),
+  });
 
   const { data } = useQuery({
     queryKey: ["profile-full"],
@@ -269,6 +278,15 @@ function ProfilePage() {
 
       {dialog === "export" && <ExportJsonDialog onClose={() => setDialog(null)} />}
       {dialog === "import" && <ImportJsonDialog onClose={() => setDialog(null)} />}
+
+      {isAdmin?.isAdmin && (
+        <button
+          onClick={() => navigate({ to: "/admin" })}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background py-3 text-sm font-medium"
+        >
+          <ShieldCheck className="h-4 w-4" /> Panel de estadísticas
+        </button>
+      )}
 
 
       <button
