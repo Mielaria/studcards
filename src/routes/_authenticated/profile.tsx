@@ -270,6 +270,15 @@ function ProfilePage() {
       {dialog === "export" && <ExportJsonDialog onClose={() => setDialog(null)} />}
       {dialog === "import" && <ImportJsonDialog onClose={() => setDialog(null)} />}
 
+      {isAdmin?.isAdmin && (
+        <button
+          onClick={() => navigate({ to: "/admin" })}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background py-3 text-sm font-medium"
+        >
+          <ShieldCheck className="h-4 w-4" /> Panel de estadísticas
+        </button>
+      )}
+
 
       <button
         onClick={signOut}
