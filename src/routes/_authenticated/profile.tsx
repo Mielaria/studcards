@@ -15,6 +15,7 @@ import {
   Check,
   X,
   Camera,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportPdf } from "@/lib/backup";
@@ -75,6 +76,12 @@ function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const isAdminFn = useServerFn(checkIsAdmin);
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is-admin"],
+    queryFn: () => isAdminFn({ data: undefined }),
+  });
 
   const { data } = useQuery({
     queryKey: ["profile-full"],
