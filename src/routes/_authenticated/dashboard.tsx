@@ -7,6 +7,8 @@ import { fetchStateCounts } from "@/lib/card-state";
 import { serverNow } from "@/lib/clock";
 import { computeStreak } from "@/lib/streak";
 import { useOfficialDay } from "@/hooks/useOfficialDay";
+import { SessionsPie } from "@/components/SessionsPie";
+
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -137,6 +139,9 @@ function Dashboard() {
           <Plus className="h-6 w-6" />
         </Link>
       </section>
+
+      <SessionsPie dayKeyNow={dayKeyNow} />
+
 
       {user && stats?.total === 0 && (
         <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/60 p-6 text-center">
