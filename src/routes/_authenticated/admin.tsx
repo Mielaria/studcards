@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { ShieldCheck, Loader2, Search } from "lucide-react";
 import {
   checkIsAdmin,
   getAdminOverview,
@@ -13,7 +13,23 @@ import {
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
-  head: () => ({ meta: [{ title: "Panel de estadísticas — StudCards" }] }),
+  head: () => ({
+    meta: [
+      { title: "Panel de estadísticas — StudCards" },
+      {
+        name: "description",
+        content:
+          "Panel del administrador: uso de IA, rachas y progreso de cartas de cada usuario.",
+      },
+      { property: "og:title", content: "Panel de estadísticas — StudCards" },
+      {
+        property: "og:description",
+        content: "Uso de IA, rachas y progreso por usuario en StudCards.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: AdminPage,
 });
 
@@ -23,6 +39,7 @@ function AdminPage() {
   const isAdminFn = useServerFn(checkIsAdmin);
   const overviewFn = useServerFn(getAdminOverview);
   const setLimitFn = useServerFn(setAiLimit);
+  const [q, setQ] = useState("");
 
   const { data: adminCheck, isLoading: checking } = useQuery({
     queryKey: ["is-admin"],
@@ -38,6 +55,17 @@ function AdminPage() {
     enabled: !!adminCheck?.isAdmin,
     queryFn: () => overviewFn({ data: undefined }),
   });
+
+  const users = useMemo(() => {
+    const list = data?.users ?? [];
+    const term = q.trim().toLowerCase();
+    if (!term) return list;
+    return list.filter(
+      (u) =>
+        u.email.toLowerCase().includes(term) ||
+        (u.username ?? "").toLowerCase().includes(term),
+    );
+  }, [data, q]);
 
   async function save(u: AdminUserRow, aiEnabled: boolean, dailyLimit: number | null) {
     try {
@@ -61,10 +89,20 @@ function AdminPage() {
 
   return (
     <AppShell>
-      <header className="mb-6 flex items-center gap-2">
+      <header className="mb-4 flex items-center gap-2">
         <ShieldCheck className="h-5 w-5 text-primary" />
         <h1 className="font-display text-2xl font-semibold">Panel de estadísticas</h1>
       </header>
+
+      <div className="mb-5 flex items-center gap-2 rounded-xl border border-input bg-background px-3 py-2">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por correo o nombre…"
+          className="w-full bg-transparent text-sm outline-none"
+        />
+      </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">Cargando usuarios…</p>}
       {error && (
@@ -72,9 +110,12 @@ function AdminPage() {
           {error instanceof Error ? error.message : "Error"}
         </p>
       )}
+      {!isLoading && !error && users.length === 0 && (
+        <p className="text-sm text-muted-foreground">No hay usuarios que coincidan.</p>
+      )}
 
       <div className="space-y-3">
-        {(data?.users ?? []).map((u) => (
+        {users.map((u) => (
           <UserRow key={u.user_id} user={u} onSave={save} />
         ))}
       </div>
